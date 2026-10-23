@@ -31,9 +31,70 @@ export function formatWeek(weekStart: string) {
   return `${fmt(weekStart)} – ${fmt(end)}`;
 }
 
+/** Monday (IST) of the week containing `date` — use for default period filters. */
+export function currentWeekStart(date = new Date()) {
+  return weekStartKey(date);
+}
+
+/** Monday start of the most recently completed ISO week (IST). */
+export function lastCompletedWeekStart(date = new Date()) {
+  return addDays(weekStartKey(date), -7);
+}
+
 export function recentWeeks(count = 8) {
   const current = weekStartKey();
   return Array.from({ length: count }, (_, index) => addDays(current, -7 * (count - 1 - index))).reverse();
+}
+
+export function monthKey(date = new Date()) {
+  const ist = new Date(date.getTime() + IST);
+  const y = ist.getUTCFullYear();
+  const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+export function formatMonth(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function recentMonths(count = 12) {
+  const [startY, startM] = monthKey().split("-").map(Number);
+  return Array.from({ length: count }, (_, index) => {
+    const d = new Date(Date.UTC(startY, startM - 1 - (count - 1 - index), 1));
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  });
+}
+
+/** Display a stored `YYYY-MM-DD` calendar date (UTC semantics). */
+export function formatCalendarDate(key?: string | null) {
+  if (!key) return "—";
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** Mintlify / publication timestamps (ISO), not calendar `YYYY-MM-DD` keys. */
+export function formatPublicationTimestamp(iso?: string | null) {
+  if (!iso) return "Not recorded";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Not recorded";
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 export function formatWhen(iso?: string | null) {
@@ -50,6 +111,22 @@ export function formatWhen(iso?: string | null) {
 export function formatNumber(value: number | null | undefined, digits = 0) {
   if (value == null || Number.isNaN(value)) return "—";
   return value.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+
+export function formatDurationHours(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) return "N/A";
+  const totalSeconds = Math.round(value * 3600);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return remMinutes > 0 ? `${hours}h ${remMinutes}m` : `${hours}h`;
+}
+
+export function formatDurationHoursGoal(value: number) {
+  return `≤ ${formatDurationHours(value)}`;
 }
 
 export type Metric = {

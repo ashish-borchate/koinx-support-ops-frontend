@@ -1,8 +1,10 @@
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  payload?: Record<string, unknown>;
+  constructor(status: number, message: string, payload?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -73,7 +75,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     if (!window.location.pathname.startsWith("/login")) window.location.assign("/login");
   }
   if (!response.ok) {
-    throw new ApiError(response.status, failureMessage(response.status, data, text));
+    const { error: _e, message: _m, ...rest } = data as Record<string, unknown>;
+    throw new ApiError(response.status, failureMessage(response.status, data, text), rest);
   }
   return data as T;
 }

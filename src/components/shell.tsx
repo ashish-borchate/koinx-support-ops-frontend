@@ -1,29 +1,25 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
-  CalendarRange,
   ChevronDown,
   ClipboardCheck,
   Eye,
   Files,
   Flag,
   Gauge,
+  GraduationCap,
   KeyRound,
   LayoutDashboard,
+  LineChart,
   Library,
-  ListChecks,
   LogOut,
   Megaphone,
   Menu,
   MessageSquarePlus,
   Plug,
-  RefreshCw,
-  ScrollText,
   Sparkles,
-  Siren,
-  TableProperties,
   UserRound,
   Users,
 } from "lucide-react";
@@ -37,18 +33,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { FreshdeskStatusPill } from "@/components/design/freshdesk-status";
+import { HubNotificationToasts } from "@/components/hub-notification-toasts";
 import { ThemeSwitcher } from "@/components/design/theme-switcher";
-import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatWhen } from "@/lib/format";
+import { moduleHomePath } from "@/lib/module-nav";
 import { prefetchRoute } from "@/lib/route-prefetch";
-import { STALE } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 
 type LinkItem = { to: string; label: string; icon: typeof LayoutDashboard; any: string[] };
 
 type NavGroup = { id: string; label: string; links: LinkItem[] };
+
+function resolveNavTo(to: string, can: (...keys: string[]) => boolean) {
+  if (to === "/supported-files/dashboard") {
+    return moduleHomePath(can, "/supported-files", "supported_files.dashboard", "supported_files.tracker");
+  }
+  if (to === "/token-migration/dashboard") {
+    return moduleHomePath(can, "/token-migration", "token_migration.dashboard", "token_migration.tracker");
+  }
+  if (to === "/negative-reviews/dashboard") {
+    return moduleHomePath(can, "/negative-reviews", "negative_reviews.dashboard", "negative_reviews.tracker");
+  }
+  return to;
+}
 
 const groups: NavGroup[] = [
   {
@@ -56,24 +63,25 @@ const groups: NavGroup[] = [
     label: "Overview",
     links: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, any: [] },
+      { to: "/management", label: "Management Overview", icon: LineChart, any: ["management.view"] },
       { to: "/support-updates", label: "Support Updates", icon: Megaphone, any: ["support_updates.view"] },
       { to: "/reported-issues", label: "Reported Issues", icon: Flag, any: ["reported_issues.view_all", "reported_issues.view_own"] },
     ],
   },
   {
-    id: "operations",
-    label: "Operations",
+    id: "quality",
+    label: "Quality & performance",
     links: [
-      { to: "/support-actions", label: "Support Actions", icon: MessageSquarePlus, any: ["support_actions.view"] },
-      { to: "/escalations", label: "Escalations", icon: Siren, any: ["escalations.view_team", "escalations.view_own"] },
-      { to: "/tasks", label: "Tasks", icon: ListChecks, any: ["tasks.view_team", "tasks.view_own"] },
+      { to: "/kpi", label: "KPI Performance", icon: Gauge, any: ["kpi.view_team", "kpi.view_own"] },
+      { to: "/qa", label: "Quality Assurance", icon: ClipboardCheck, any: ["qa.view_team", "qa.view_own", "qa.create"] },
+      { to: "/negative-reviews/dashboard", label: "Negative Reviews", icon: LayoutDashboard, any: ["negative_reviews.dashboard", "negative_reviews.tracker"] },
+      { to: "/coaching", label: "Coaching Center", icon: GraduationCap, any: ["coaching.view_team", "coaching.view_own"] },
     ],
   },
   {
     id: "knowledge",
     label: "Knowledge & product",
     links: [
-      { to: "/knowledge-base", label: "Knowledge Base", icon: Library, any: ["knowledge_base.view"] },
       { to: "/product-guides", label: "Product Guides", icon: BookOpen, any: ["guides.view"] },
       {
         to: "/integration-steps/dashboard",
@@ -81,34 +89,11 @@ const groups: NavGroup[] = [
         icon: Plug,
         any: ["integration.dashboard", "integration.tracker", "integration.library", "integration.tech", "integration.view"],
       },
+      { to: "/supported-files/dashboard", label: "Supported Files", icon: Files, any: ["supported_files.dashboard", "supported_files.tracker"] },
+      { to: "/token-migration/dashboard", label: "Token Migration", icon: LayoutDashboard, any: ["token_migration.dashboard", "token_migration.tracker"] },
+      { to: "/product-feedback", label: "Product Feedback", icon: MessageSquarePlus, any: ["feedback.submit", "feedback.view"] },
       { to: "/feature-impacts", label: "Feature Impact", icon: Sparkles, any: ["feature_impact.view", "guides.manage"] },
-      { to: "/supported-files/dashboard", label: "Supported Files", icon: Files, any: ["supported_files.dashboard"] },
-      { to: "/supported-files/tracker", label: "Supported Files · Tracker", icon: TableProperties, any: ["supported_files.tracker"] },
-      { to: "/token-migration/dashboard", label: "Token Migration", icon: LayoutDashboard, any: ["token_migration.dashboard"] },
-      { to: "/token-migration/tracker", label: "Token Migration · Tracker", icon: TableProperties, any: ["token_migration.tracker"] },
-      { to: "/knowledge?type=integration", label: "Legacy integrations", icon: RefreshCw, any: ["guides.view"] },
-    ],
-  },
-  {
-    id: "quality",
-    label: "Quality & performance",
-    links: [
-      { to: "/kpi", label: "KPI", icon: Gauge, any: ["kpi.view_team", "kpi.view_own"] },
-      { to: "/qa", label: "QA", icon: ClipboardCheck, any: ["qa.view_team", "qa.view_own", "qa.create"] },
-      { to: "/negative-reviews/dashboard", label: "Negative Reviews", icon: LayoutDashboard, any: ["negative_reviews.dashboard"] },
-      { to: "/negative-reviews/tracker", label: "Negative Reviews · Tracker", icon: TableProperties, any: ["negative_reviews.tracker"] },
-      { to: "/product-feedback/form", label: "Product Feedback", icon: MessageSquarePlus, any: ["feedback.submit"] },
-      { to: "/product-feedback/tracker", label: "Product Feedback · Tracker", icon: TableProperties, any: ["feedback.view"] },
-    ],
-  },
-  {
-    id: "management",
-    label: "Management",
-    links: [
-      { to: "/weekly", label: "Weekly", icon: CalendarRange, any: ["weekly.view"] },
-      { to: "/admin/people", label: "Users", icon: Users, any: ["users.manage", "users.view"] },
-      { to: "/admin/freshdesk", label: "Freshdesk", icon: RefreshCw, any: ["freshdesk.manage", "freshdesk.view"] },
-      { to: "/admin/audit", label: "Audit", icon: ScrollText, any: ["audit.view"] },
+      { to: "/knowledge-base", label: "Knowledge Base", icon: Library, any: ["knowledge_base.view"] },
     ],
   },
 ];
@@ -136,7 +121,9 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-1">
       {groups.map((group) => {
-        const links = group.links.filter((link) => link.any.length === 0 || can(...link.any));
+        const links = group.links
+          .filter((link) => link.any.length === 0 || can(...link.any))
+          .map((link) => ({ ...link, to: resolveNavTo(link.to, can) }));
         if (!links.length) return null;
         const isCollapsed = collapsed[group.id] ?? false;
         return (
@@ -144,10 +131,15 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
             <button
               type="button"
               onClick={() => setCollapsed((c) => ({ ...c, [group.id]: !isCollapsed }))}
-              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase hover:bg-sidebar-accent/60 hover:text-foreground"
+              className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[10px] font-semibold tracking-[0.12em] text-primary uppercase motion-safe:transition-colors motion-safe:duration-200 hover:bg-sidebar-accent/60 hover:text-primary"
             >
               {group.label}
-              <ChevronDown className={cn("size-3.5 motion-safe:transition-transform", isCollapsed && "-rotate-90")} />
+              <ChevronDown
+                className={cn(
+                  "size-3.5 text-primary/70 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out",
+                  isCollapsed && "-rotate-90",
+                )}
+              />
             </button>
             {!isCollapsed ? (
               <div className="mt-0.5 flex flex-col gap-0.5">
@@ -163,15 +155,18 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
                       cn(
                         "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] motion-safe:transition-[background-color,color] motion-safe:duration-200",
                         isActive
-                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
-                          : "text-sidebar-foreground/90 hover:bg-sidebar-accent/50 hover:text-foreground",
+                          ? "bg-sidebar-accent font-medium text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary motion-safe:transition-[background-color]"
+                          : "text-sidebar-foreground/90 hover:bg-sidebar-accent/55 hover:text-foreground",
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
                         <link.icon
-                          className={cn("size-4 shrink-0 motion-safe:transition-opacity", isActive ? "text-primary opacity-100" : "opacity-65 group-hover:opacity-100")}
+                          className={cn(
+                            "size-4 shrink-0 text-foreground motion-safe:transition-opacity",
+                            isActive ? "opacity-90" : "opacity-65 group-hover:opacity-100",
+                          )}
                         />
                         <span className="truncate">{link.label}</span>
                       </>
@@ -184,6 +179,17 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
         );
       })}
     </nav>
+  );
+}
+
+function SidebarFooterCredit() {
+  return (
+    <p
+      className="flex flex-col items-center rounded-lg border border-primary/45 bg-primary/[0.04] px-2 py-2 text-center text-[10px] leading-snug font-medium text-foreground/90 select-none dark:border-primary/55 dark:bg-primary/[0.08] dark:text-foreground/95"
+    >
+      <span className="whitespace-nowrap">Designed and Built from scratch, Thoughtfully,</span>
+      <span className="whitespace-nowrap">for the KoinX Support Team 💙 - Ashish</span>
+    </p>
   );
 }
 
@@ -201,17 +207,15 @@ function AccountMenu() {
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
             {user.name.slice(0, 1)}
           </span>
-          <span className="min-w-0 hidden sm:block">
-            <span className="block truncate text-sm font-medium text-foreground">{user.name}</span>
-            <span className="block truncate text-xs text-muted-foreground">{user.roleName}</span>
-          </span>
+          <span className="min-w-0 hidden truncate text-sm font-medium text-foreground sm:block">{user.name}</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>
-          <span className="block text-sm text-foreground">{user.name}</span>
-          <span className="block text-xs font-normal text-muted-foreground">{user.roleName}</span>
-          <span className="block text-xs font-normal text-muted-foreground">{user.email}</span>
+        <DropdownMenuLabel className="flex items-center gap-2.5 font-normal">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+            {user.name.slice(0, 1)}
+          </span>
+          <span className="min-w-0 truncate text-sm font-medium text-foreground">{user.name}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate("/account")}>
@@ -235,6 +239,14 @@ function AccountMenu() {
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
+        <div
+          className="px-2 py-2"
+          onPointerDown={(event) => event.preventDefault()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <ThemeSwitcher className="space-y-1.5" />
+        </div>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => {
             logout();
@@ -250,50 +262,21 @@ function AccountMenu() {
 }
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { effective, viewAs, exitViewAs, can } = useAuth();
+  const { viewAs, exitViewAs } = useAuth();
   const [open, setOpen] = useState(false);
-  const sync = useQuery({
-    queryKey: ["freshdesk-syncs", viewAs?.id || "self"],
-    queryFn: () => api<{ latest: { status: string; finishedAt?: string; message?: string } | null; configured: boolean }>("/api/freshdesk/syncs"),
-    enabled: can("freshdesk.view", "freshdesk.manage", "dashboard.overview"),
-    staleTime: STALE.session,
-  });
-
-  const latest = sync.data?.latest;
-  const showFreshdesk = can("freshdesk.view", "freshdesk.manage", "dashboard.overview");
-  const syncLabel = !latest
-    ? "No Freshdesk sync yet"
-    : latest.status === "success"
-      ? `Synced ${formatWhen(latest.finishedAt)}`
-      : latest.status === "failed"
-        ? `Sync failed ${formatWhen(latest.finishedAt)}`
-        : latest.status === "running"
-          ? "Sync in progress"
-          : "Freshdesk not connected · sample metrics";
-
-  const syncStatus: "success" | "failed" | "running" | "idle" | "sample" =
-    !latest || !sync.data?.configured
-      ? "sample"
-      : latest.status === "success"
-        ? "success"
-        : latest.status === "failed"
-          ? "failed"
-          : latest.status === "running"
-            ? "running"
-            : "idle";
 
   return (
     <div className="min-h-svh bg-background lg:grid lg:grid-cols-[260px_1fr]">
-      <aside className="hidden border-r border-sidebar-border bg-sidebar lg:flex lg:flex-col">
-        <div className="border-b border-sidebar-border/80 bg-gradient-to-b from-primary/[0.04] to-transparent px-4 py-5">
+      <aside className="sticky top-0 hidden h-svh max-h-svh flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+        <div className="shrink-0 border-b border-sidebar-border/80 bg-gradient-to-b from-primary/[0.04] to-transparent px-4 py-5">
           <p className="text-[11px] font-semibold tracking-[0.08em] text-primary">KoinX</p>
           <p className="text-[15px] font-semibold tracking-tight text-foreground">Support Operations</p>
         </div>
-        <div className="flex-1 overflow-y-auto px-2 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
           <NavItems />
         </div>
-        <div className="border-t border-sidebar-border p-3">
-          <ThemeSwitcher />
+        <div className="shrink-0 border-t border-sidebar-border px-3 pt-3 pb-4">
+          <SidebarFooterCredit />
         </div>
       </aside>
       <div className="app-atmosphere flex min-w-0 flex-col">
@@ -307,19 +290,16 @@ export function Shell({ children }: { children: ReactNode }) {
             </Button>
           </div>
         ) : null}
-        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border/60 bg-card/85 px-4 py-2.5 backdrop-blur-md md:px-8">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border/70 bg-card/80 px-4 py-2.5 shadow-[0_1px_0_0_rgb(0_0_0/0.03)] backdrop-blur-md supports-[backdrop-filter]:bg-card/75 md:px-8 dark:shadow-none">
           <Button variant="outline" size="icon" className="lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu">
             <Menu />
           </Button>
           <div className="min-w-0 flex-1">
-            {showFreshdesk ? (
-              <FreshdeskStatusPill label={syncLabel} status={syncStatus} />
-            ) : (
-              <p className="truncate text-xs text-muted-foreground">{effective?.title || "Support Operations"}</p>
-            )}
+            <p className="truncate text-xs text-muted-foreground">Support Operations</p>
           </div>
           <AccountMenu />
         </header>
+        <HubNotificationToasts />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
       <Sheet open={open} onOpenChange={setOpen}>
@@ -331,7 +311,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <NavItems onNavigate={() => setOpen(false)} />
           </div>
           <div className="border-t border-sidebar-border p-3">
-            <ThemeSwitcher />
+            <SidebarFooterCredit />
           </div>
         </SheetContent>
       </Sheet>

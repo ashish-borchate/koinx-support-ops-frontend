@@ -46,8 +46,16 @@ export function PageHeaderLegacy({ eyebrow, title, action }: { eyebrow?: string;
   return <PageHeader eyebrow={eyebrow} title={title} action={action} />;
 }
 
-export function Empty({ title, body }: { title: string; body: string }) {
-  return <EmptyState title={title} body={body} />;
+export function Empty({
+  title,
+  body,
+  bodyClassName,
+}: {
+  title: string;
+  body: string;
+  bodyClassName?: string;
+}) {
+  return <EmptyState title={title} body={body} bodyClassName={bodyClassName} />;
 }
 
 export function LoadingBlock() {
@@ -56,7 +64,7 @@ export function LoadingBlock() {
 
 export function ErrorBlock({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-rose-200/80 bg-rose-50/80 px-4 py-3 text-sm text-rose-900 shadow-[var(--shadow-card)]">
+    <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive shadow-[var(--shadow-card)]">
       {message}
     </div>
   );

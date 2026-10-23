@@ -1,33 +1,27 @@
-import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useSearchParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { Shell } from "@/components/shell";
 import { useAuth } from "@/lib/auth";
-import { AuditPage, FreshdeskPage, PeoplePage } from "@/pages/admin";
+import { PeoplePage } from "@/pages/admin";
 import { DashboardPage } from "@/pages/dashboard";
-import { EscalationsPage } from "@/pages/escalations";
 import { KpiPage } from "@/pages/kpi";
-import { GuideFormPage, GuidePage, KnowledgePage } from "@/pages/knowledge";
-import { ProductGuideDetailPage, ProductGuideFormPage, ProductGuidesPage } from "@/pages/product-guides";
+import { ProductGuidesRoutes } from "@/pages/product-guides";
 import { FeatureImpactDetailPage, FeatureImpactFormPage, FeatureImpactsPage } from "@/pages/feature-impacts";
 import { IntegrationStepsRoutes } from "@/pages/integration-steps";
 import { ProductFeedbackRoutes } from "@/pages/product-feedback";
 import { SupportedFilesRoutes } from "@/pages/supported-files";
-import { NegativeReviewsRoutes } from "@/pages/negative-reviews";
+import { NegativeReviewsRoutes, NrDailyDsatPage } from "@/pages/negative-reviews";
 import { TokenMigrationRoutes } from "@/pages/token-migration";
 import { KnowledgeBaseRoutes } from "@/pages/knowledge-base";
-import {
-  SupportActionCreatePage,
-  SupportActionDetailPage,
-  SupportActionsListPage,
-} from "@/pages/support-actions";
 import { PasswordPage, ProfilePage, ViewAsPage } from "@/pages/account";
 import { LoginPage } from "@/pages/login";
 import { QaDetailPage, QaFormPage, QaListPage } from "@/pages/qa";
-import { TasksPage } from "@/pages/tasks";
+import { QaRandomAuditsPage } from "@/pages/qa-random-audits";
+import { QaAppealDetailPage, QaAppealsPage } from "@/pages/qa-appeals";
+import { CoachingPage } from "@/pages/coaching";
+import { ManagementOverviewPage } from "@/pages/management-overview";
 import { SupportUpdatesPage } from "@/pages/support-updates";
-import { ReportedIssuesPage, ReportedIssueDetailPage } from "@/pages/reported-issues";
-import { WeeklyPage } from "@/pages/weekly";
-
+import { DeletedReportedIssuesPage, ReportedIssuesPage, ReportedIssueDetailPage } from "@/pages/reported-issues";
 function AuthLayout() {
   const { user, loading } = useAuth();
   if (loading) {
@@ -57,10 +51,18 @@ function Writes({ children }: { children: ReactNode }) {
   return children;
 }
 
-function SupportActionDetailRoute() {
-  const { id } = useParams();
-  if (!id) return <Navigate to="/support-actions" replace />;
-  return <SupportActionDetailPage id={id} />;
+function QaNewRoute() {
+  const { can } = useAuth();
+  const [params] = useSearchParams();
+  const senior = params.get("qaMode") === "senior_agent_qa";
+  if (senior && !can("qa.senior_agent_qa")) return <Navigate to="/qa" replace />;
+  if (!senior && !can("qa.create")) return <Navigate to="/qa" replace />;
+  return <QaFormPage />;
+}
+
+function QaEditRoute() {
+  const { can } = useAuth();
+  return can("qa.edit") || can("qa.senior_agent_qa") ? <QaFormPage /> : <Navigate to="/qa" replace />;
 }
 
 export default function App() {
@@ -73,18 +75,25 @@ export default function App() {
         <Route path="/account/password" element={<PasswordPage />} />
         <Route path="/view-as" element={<Permit any={["view_as"]}><ViewAsPage /></Permit>} />
         <Route path="/kpi" element={<Permit any={["kpi.view_team", "kpi.view_own"]}><KpiPage /></Permit>} />
+        <Route path="/management" element={<Permit any={["management.view"]}><ManagementOverviewPage /></Permit>} />
+        <Route path="/daily-dsat" element={<NrDailyDsatPage />} />
         <Route path="/qa" element={<Permit any={["qa.view_team", "qa.view_own", "qa.create"]}><QaListPage /></Permit>} />
-        <Route path="/qa/new" element={<Writes><Permit any={["qa.create"]}><QaFormPage /></Permit></Writes>} />
-        <Route path="/qa/:id/edit" element={<Writes><Permit any={["qa.edit"]}><QaFormPage /></Permit></Writes>} />
+        <Route path="/qa/random-audits" element={<Permit any={["qa.random_audit.view_team"]}><QaRandomAuditsPage /></Permit>} />
+        <Route path="/qa/appeals" element={<Permit any={["qa.view_team", "qa.view_own"]}><QaAppealsPage /></Permit>} />
+        <Route path="/qa/appeals/:appealId" element={<Permit any={["qa.view_team", "qa.view_own"]}><QaAppealDetailPage /></Permit>} />
+        <Route path="/qa/new" element={<Writes><QaNewRoute /></Writes>} />
+        <Route path="/qa/:id/edit" element={<Writes><QaEditRoute /></Writes>} />
         <Route path="/qa/:id" element={<Permit any={["qa.view_team", "qa.view_own"]}><QaDetailPage /></Permit>} />
-        <Route path="/knowledge" element={<Permit any={["guides.view"]}><KnowledgePage /></Permit>} />
-        <Route path="/knowledge/new" element={<Writes><Permit any={["guides.edit"]}><GuideFormPage /></Permit></Writes>} />
-        <Route path="/knowledge/:id/edit" element={<Writes><Permit any={["guides.edit"]}><GuideFormPage /></Permit></Writes>} />
-        <Route path="/knowledge/:id" element={<Permit any={["guides.view"]}><GuidePage /></Permit>} />
-        <Route path="/product-guides" element={<Permit any={["guides.view"]}><ProductGuidesPage /></Permit>} />
-        <Route path="/product-guides/new" element={<Writes><Permit any={["guides.manage"]}><ProductGuideFormPage /></Permit></Writes>} />
-        <Route path="/product-guides/:id/edit" element={<Writes><Permit any={["guides.manage"]}><ProductGuideFormPage /></Permit></Writes>} />
-        <Route path="/product-guides/:id" element={<Permit any={["guides.view"]}><ProductGuideDetailPage /></Permit>} />
+        <Route path="/coaching" element={<Permit any={["coaching.view_team", "coaching.view_own"]}><CoachingPage /></Permit>} />
+        <Route path="/knowledge/*" element={<Navigate to="/integration-steps/tracker" replace />} />
+        <Route
+          path="/product-guides/*"
+          element={
+            <Permit any={["guides.view"]}>
+              <ProductGuidesRoutes />
+            </Permit>
+          }
+        />
         <Route path="/feature-impacts" element={<Permit any={["feature_impact.view", "guides.manage"]}><FeatureImpactsPage /></Permit>} />
         <Route path="/feature-impacts/new" element={<Writes><Permit any={["feature_impact.manage"]}><FeatureImpactFormPage /></Permit></Writes>} />
         <Route path="/feature-impacts/:id/edit" element={<Writes><Permit any={["feature_impact.manage"]}><FeatureImpactFormPage /></Permit></Writes>} />
@@ -137,25 +146,18 @@ export default function App() {
             </Permit>
           }
         />
-        <Route path="/escalations" element={<Permit any={["escalations.view_team", "escalations.view_own"]}><EscalationsPage /></Permit>} />
-        <Route path="/tasks" element={<Permit any={["tasks.view_team", "tasks.view_own"]}><TasksPage /></Permit>} />
-        <Route path="/support-actions" element={<Permit any={["support_actions.view"]}><SupportActionsListPage /></Permit>} />
-        <Route path="/support-actions/new" element={<Writes><Permit any={["support_actions.create"]}><SupportActionCreatePage /></Permit></Writes>} />
+        <Route path="/escalations" element={<Navigate to="/" replace />} />
+        <Route path="/tasks" element={<Navigate to="/reported-issues" replace />} />
+        <Route path="/support-actions" element={<Navigate to="/reported-issues" replace />} />
+        <Route path="/support-actions/*" element={<Navigate to="/reported-issues" replace />} />
         <Route path="/support-updates" element={<Permit any={["support_updates.view"]}><SupportUpdatesPage /></Permit>} />
         <Route path="/reported-issues" element={<Permit any={["reported_issues.view_all", "reported_issues.view_own"]}><ReportedIssuesPage /></Permit>} />
+        <Route path="/reported-issues/deleted" element={<Permit any={["reported_issues.view_all"]}><DeletedReportedIssuesPage /></Permit>} />
         <Route path="/reported-issues/:id" element={<Permit any={["reported_issues.view_all", "reported_issues.view_own"]}><ReportedIssueDetailPage /></Permit>} />
-        <Route
-          path="/support-actions/:id"
-          element={
-            <Permit any={["support_actions.view"]}>
-              <SupportActionDetailRoute />
-            </Permit>
-          }
-        />
-        <Route path="/weekly" element={<Permit any={["weekly.view"]}><WeeklyPage /></Permit>} />
+        <Route path="/weekly" element={<Navigate to="/" replace />} />
         <Route path="/admin/people" element={<Permit any={["users.manage"]}><PeoplePage /></Permit>} />
-        <Route path="/admin/freshdesk" element={<Permit any={["freshdesk.manage"]}><FreshdeskPage /></Permit>} />
-        <Route path="/admin/audit" element={<Permit any={["audit.view"]}><AuditPage /></Permit>} />
+        <Route path="/admin/freshdesk" element={<Navigate to="/" replace />} />
+        <Route path="/admin/audit" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

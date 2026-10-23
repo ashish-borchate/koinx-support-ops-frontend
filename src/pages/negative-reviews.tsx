@@ -1,6 +1,6 @@
-import { Outlet, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -17,18 +17,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Empty, ErrorBlock, LoadingBlock, StatusBadge, DataTableShell, FilterToolbar, ModuleSubnav, PageHeader, DetailSection, ActivityTimeline } from "@/components/bits";
+import { Empty, ErrorBlock, LoadingBlock, StatusBadge, FilterToolbar, ModuleSubnav, PageHeader, ActivityTimeline } from "@/components/bits";
+import { TruncatedHoverField } from "@/components/truncated-hover-field";
 import { MetricCard } from "@/components/design/metric-card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { moduleIndexSegment } from "@/lib/module-nav";
 
 const ROOT_CAUSES = [
   "Agent Issue",
@@ -68,30 +62,94 @@ type ReviewRow = {
   coachingNotes: string;
   acknowledgedByAgent: boolean;
   reviewDate: string;
+  linkedCoaching?: { id: string; status: string; href: string } | null;
   actions?: { edit: boolean; markCoachingDone: boolean; acknowledge: boolean };
 };
 
+type NrLayoutContext = {
+  dateFrom: string;
+  dateTo: string;
+  setDateFrom: (v: string) => void;
+  setDateTo: (v: string) => void;
+  addOpen: boolean;
+  setAddOpen: (v: boolean) => void;
+};
+
+const NrLayoutContext = createContext<NrLayoutContext | null>(null);
+
+export function useNrDashboardToolbar() {
+  const ctx = useContext(NrLayoutContext);
+  if (!ctx) throw new Error("useNrDashboardToolbar must be used within NrLayout");
+  return ctx;
+}
+
 function NrLayout() {
-  const { can } = useAuth();
+  const { can, canMutate } = useAuth();
+  const location = useLocation();
+  const isDashboard = location.pathname.includes("/negative-reviews/dashboard");
+  const isTracker = location.pathname.includes("/negative-reviews/tracker");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const links = [
     { to: "/negative-reviews/dashboard", label: "Dashboard", any: ["negative_reviews.dashboard"] },
     { to: "/negative-reviews/tracker", label: "Tracker", any: ["negative_reviews.tracker"] },
   ].filter((l) => can(...l.any));
+  const toolbar = { dateFrom, dateTo, setDateFrom, setDateTo, addOpen, setAddOpen };
   return (
-    <div className="space-y-2">
-      <PageHeader
-        eyebrow="Quality & performance"
-        title="Negative Reviews"
-        description="DSAT reviews, coaching follow-up, and agent acknowledgement."
-      />
-      <ModuleSubnav links={links.map((l) => ({ to: l.to, label: l.label }))} />
-      <Outlet />
-    </div>
+    <NrLayoutContext.Provider value={toolbar}>
+      <div className="space-y-2">
+        <PageHeader
+          eyebrow="Quality & performance"
+          title="Negative Reviews"
+          description="DSAT reviews, coaching follow-up, and agent acknowledgement."
+        />
+        <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 pb-3">
+          <ModuleSubnav
+            links={links.map((l) => ({ to: l.to, label: l.label }))}
+            className="mb-0 shrink-0 border-0 pb-0"
+          />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {isDashboard ? (
+              <>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-auto min-w-[9.5rem] bg-card"
+                  aria-label="From date"
+                />
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-auto min-w-[9.5rem] bg-card"
+                  aria-label="To date"
+                />
+              </>
+            ) : null}
+            {(isDashboard || isTracker) && canMutate("negative_reviews.manage") ? (
+              <Button type="button" onClick={() => setAddOpen(true)}>
+                Add negative review
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        <Outlet />
+        {isDashboard || isTracker ? <ReviewFormDialog open={addOpen} onOpenChange={setAddOpen} /> : null}
+      </div>
+    </NrLayoutContext.Provider>
   );
 }
 
 function StatusPill({ value }: { value: string }) {
   return <StatusBadge value={value} />;
+}
+
+function NegativeReviewsIndex() {
+  const { can } = useAuth();
+  const segment = moduleIndexSegment(can, "negative_reviews.dashboard", "negative_reviews.tracker");
+  return <Navigate to={segment} replace />;
 }
 
 export function NegativeReviewsRoutes() {
@@ -100,23 +158,171 @@ export function NegativeReviewsRoutes() {
       <Route element={<NrLayout />}>
         <Route path="dashboard" element={<NrDashboardPage />} />
         <Route path="tracker" element={<NrTrackerPage />} />
-        <Route index element={<NrDashboardPage />} />
+        <Route path="daily-dsat" element={<NrDailyDsatPage />} />
+        <Route index element={<NegativeReviewsIndex />} />
       </Route>
     </Routes>
   );
 }
 
+type DsatDailyCheckRow = {
+  id: string;
+  userId: string;
+  dateIst: string;
+  completedAt: string;
+  outcome: "dsat_found" | "no_dsat_found";
+  note: string;
+};
+
+export function NrDailyDsatPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const dateIst = searchParams.get("date") ?? "";
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(dateIst);
+  const [outcome, setOutcome] = useState<"" | "dsat_found" | "no_dsat_found">("");
+  const [note, setNote] = useState("");
+
+  const checks = useQuery({
+    queryKey: ["dsat-daily-checks", dateIst],
+    enabled: validDate,
+    queryFn: () =>
+      api<{ checks: DsatDailyCheckRow[] }>(
+        `/api/dsat/daily-checks?dateFrom=${encodeURIComponent(dateIst)}&dateTo=${encodeURIComponent(dateIst)}`,
+      ),
+  });
+
+  const existing = checks.data?.checks.find((c) => c.dateIst === dateIst) ?? null;
+
+  const submit = useMutation({
+    mutationFn: () =>
+      api<{ check: DsatDailyCheckRow }>("/api/dsat/daily-checks", {
+        method: "POST",
+        body: JSON.stringify({
+          dateIst,
+          outcome,
+          note: note.trim() || undefined,
+        }),
+      }),
+    onSuccess: () => {
+      toast.success("Daily DSAT review recorded");
+      void queryClient.invalidateQueries({ queryKey: ["dsat-daily-checks"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      navigate("/");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  if (!validDate) {
+    return <ErrorBlock message="Open this page from your Daily DSAT Check task or add a valid ?date=YYYY-MM-DD." />;
+  }
+  if (checks.isLoading) return <LoadingBlock />;
+  if (checks.isError) return <ErrorBlock message={checks.error.message} />;
+
+  const formatted = new Date(`${dateIst}T12:00:00.000Z`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  if (existing) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily DSAT Check — {formatted}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            This review was completed on{" "}
+            {new Date(existing.completedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.
+          </p>
+          <p>
+            Outcome:{" "}
+            <span className="font-medium text-foreground">
+              {existing.outcome === "no_dsat_found" ? "Checked Freshdesk — No DSAT Found" : "DSAT found"}
+            </span>
+          </p>
+          {existing.note ? <p>Note: {existing.note}</p> : null}
+          <Button type="button" variant="outline" onClick={() => navigate("/negative-reviews/tracker")}>
+            Open Negative Reviews tracker
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Daily DSAT Check — {formatted}</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Confirm you reviewed Freshdesk for negative and neutral customer satisfaction responses for this date (IST).
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label>Outcome</Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant={outcome === "dsat_found" ? "default" : "outline"}
+              className="justify-start"
+              onClick={() => setOutcome("dsat_found")}
+            >
+              DSAT found
+            </Button>
+            <Button
+              type="button"
+              variant={outcome === "no_dsat_found" ? "default" : "outline"}
+              className="justify-start"
+              onClick={() => setOutcome("no_dsat_found")}
+            >
+              Checked Freshdesk — No DSAT Found
+            </Button>
+          </div>
+          {outcome === "dsat_found" ? (
+            <p className="text-sm text-muted-foreground">
+              Investigate responses and record cases in the{" "}
+              <Link to="/negative-reviews/tracker" className="text-primary underline-offset-4 hover:underline">
+                Negative Reviews tracker
+              </Link>{" "}
+              before confirming.
+            </p>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dsat-note">Notes (optional)</Label>
+          <Textarea id="dsat-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            disabled={!outcome || submit.isPending}
+            onClick={() => submit.mutate()}
+          >
+            Confirm completion
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => navigate("/")}>
+            Back to dashboard
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function NrDashboardPage() {
   const navigate = useNavigate();
-  const { canMutate } = useAuth();
-  const [addOpen, setAddOpen] = useState(false);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { can } = useAuth();
+  const hasDashboard = can("negative_reviews.dashboard");
+  const { dateFrom, dateTo } = useNrDashboardToolbar();
   const params = new URLSearchParams();
   if (dateFrom) params.set("dateFrom", dateFrom);
   if (dateTo) params.set("dateTo", dateTo);
   const dash = useQuery({
     queryKey: ["nr-dashboard", dateFrom, dateTo],
+    enabled: hasDashboard,
     queryFn: () =>
       api<{
         cards: Record<string, number>;
@@ -129,6 +335,7 @@ export function NrDashboardPage() {
       }>(`/api/negative-reviews/dashboard?${params.toString()}`),
   });
 
+  if (!hasDashboard) return <Navigate to="/negative-reviews/tracker" replace />;
   if (dash.isLoading) return <LoadingBlock />;
   if (dash.isError) return <ErrorBlock message={dash.error.message} />;
   const { cards, trends } = dash.data!;
@@ -140,17 +347,6 @@ export function NrDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-auto bg-card" aria-label="From date" />
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-auto bg-card" aria-label="To date" />
-        </div>
-        {canMutate("negative_reviews.manage") ? (
-          <Button type="button" onClick={() => setAddOpen(true)}>
-            Add negative review
-          </Button>
-        ) : null}
-      </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CardButton label="Total Negative Reviews" value={cards.total} onClick={() => filterLink({})} />
         <CardButton label="Agent Issues" value={cards.agentIssues} onClick={() => filterLink({ rootCause: "Agent Issue" })} />
@@ -206,7 +402,6 @@ export function NrDashboardPage() {
           ) : null}
         </div>
       )}
-      <ReviewFormDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );
 }
@@ -218,11 +413,9 @@ function CardButton({ label, value, onClick }: { label: string; value: number; o
 }
 
 export function NrTrackerPage() {
-  const { canMutate } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [q, setQ] = useState(searchParams.get("q") || "");
   const [detailId, setDetailId] = useState<string | null>(searchParams.get("id"));
-  const [addOpen, setAddOpen] = useState(false);
   const [page, setPage] = useState(Number(searchParams.get("page") || 1));
 
   const setFilter = (key: string, value: string) => {
@@ -316,38 +509,34 @@ export function NrTrackerPage() {
         }
         showClear={hasActiveFilters}
         onClear={clearFilters}
-        trailing={
-          canMutate("negative_reviews.manage") ? (
-            <Button type="button" onClick={() => setAddOpen(true)}>
-              Add review
-            </Button>
-          ) : null
-        }
       />
       {list.isLoading ? <LoadingBlock /> : null}
       {list.isError ? <ErrorBlock message={list.error.message} /> : null}
-      {list.data?.items.length === 0 ? <Empty title="No negative reviews in this view." body="Adjust filters or add a review if you manage this tracker." /> : null}
-      <DataTableShell>
-        <Table className="min-w-[1100px]">
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>Ticket date</TableHead>
-              <TableHead>Ticket number</TableHead>
-              <TableHead>Agent</TableHead>
-              <TableHead>Summary</TableHead>
-              <TableHead>Root cause</TableHead>
-              <TableHead>Soft skills</TableHead>
-              <TableHead>Coaching</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Acknowledged</TableHead>
-              <TableHead>Review date</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+      {!list.isLoading && !list.isError && list.data?.items.length === 0 ? (
+        <Empty title="No negative reviews in this view." body="Adjust filters or add a review if you manage this tracker." />
+      ) : null}
+      {!list.isLoading && list.data && list.data.items.length > 0 ? (
+      <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
+        <table className="w-full min-w-[1000px] text-sm">
+          <thead className="border-b border-border bg-muted/20 text-left text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 font-medium whitespace-nowrap">Ticket date</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Ticket #</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Agent</th>
+              <th className="min-w-[10rem] max-w-[14rem] px-3 py-3 font-medium">Summary</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Root cause</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Soft skills</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Coaching</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Status</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Ack</th>
+              <th className="px-3 py-3 font-medium whitespace-nowrap">Review date</th>
+            </tr>
+          </thead>
+          <tbody>
             {list.data?.items.map((row) => (
-              <TableRow key={row.id} className="cursor-default">
-                <TableCell className="text-muted-foreground">{row.ticketDate}</TableCell>
-                <TableCell>
+              <tr key={row.id} className="border-t border-border hover:bg-muted/40">
+                <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{row.ticketDate}</td>
+                <td className="px-3 py-3 whitespace-nowrap">
                   <button
                     type="button"
                     className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
@@ -355,28 +544,37 @@ export function NrTrackerPage() {
                   >
                     {row.ticketNumber}
                   </button>
-                </TableCell>
-                <TableCell>{row.agentName}</TableCell>
-                <TableCell className="max-w-xs truncate whitespace-normal text-muted-foreground">{row.summaryPreview}</TableCell>
-                <TableCell>{row.rootCause}</TableCell>
-                <TableCell>{row.softSkillsMissing ? "Yes" : "No"}</TableCell>
-                <TableCell>{row.coachingNeeded ? "Yes" : "No"}</TableCell>
-                <TableCell>
+                </td>
+                <td className="max-w-[10rem] truncate px-3 py-3 whitespace-nowrap">{row.agentName}</td>
+                <td className="px-3 py-3">
+                  <TruncatedHoverField
+                    variant="inline"
+                    value={row.summaryPreview || row.summaryOfIssue || ""}
+                    popoverTitle="Summary"
+                    valueClassName="font-normal text-muted-foreground"
+                    className="max-w-[14rem]"
+                  />
+                </td>
+                <td className="px-3 py-3 whitespace-nowrap">{row.rootCause}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{row.softSkillsMissing ? "Yes" : "No"}</td>
+                <td className="px-3 py-3 whitespace-nowrap">{row.coachingNeeded ? "Yes" : "No"}</td>
+                <td className="px-3 py-3 whitespace-nowrap">
                   <StatusPill value={row.coachingStatus} />
-                </TableCell>
-                <TableCell>{row.acknowledgedByAgent ? "Yes" : "No"}</TableCell>
-                <TableCell className="text-muted-foreground">{row.reviewDate}</TableCell>
-              </TableRow>
+                </td>
+                <td className="px-3 py-3 whitespace-nowrap">{row.acknowledgedByAgent ? "Yes" : "No"}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-muted-foreground">{row.reviewDate}</td>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
-      </DataTableShell>
+          </tbody>
+        </table>
+      </div>
+      ) : null}
       {list.data && list.data.total > list.data.pageSize ? (
         <div className="flex items-center gap-2 text-sm">
           <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             Previous
           </Button>
-          <span className="text-slate-500">
+          <span className="text-muted-foreground">
             Page {list.data.page} · {list.data.total} records
           </span>
           <Button
@@ -390,7 +588,6 @@ export function NrTrackerPage() {
           </Button>
         </div>
       ) : null}
-      <ReviewFormDialog open={addOpen} onOpenChange={setAddOpen} />
       <ReviewDetailDialog id={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
@@ -425,17 +622,30 @@ function ReviewFormDialog({
   const [reviewDate, setReviewDate] = useState("");
 
   useEffect(() => {
-    if (!open || !initial) return;
-    setTicketDate(initial.ticketDate || "");
-    setTicketNumber(initial.ticketNumber || "");
-    setAgentId(initial.agentId || "");
-    setSummary(initial.summaryOfIssue || "");
-    setRootCause(initial.rootCause || ROOT_CAUSES[0]);
-    setSoftMissing(Boolean(initial.softSkillsMissing));
-    setCategories(initial.softSkillsCategories || []);
-    setCoachingNeeded(Boolean(initial.coachingNeeded));
-    setCoachingNotes(initial.coachingNotes || "");
-    setReviewDate(initial.reviewDate || "");
+    if (!open) return;
+    if (initial) {
+      setTicketDate(initial.ticketDate || "");
+      setTicketNumber(initial.ticketNumber || "");
+      setAgentId(initial.agentId || "");
+      setSummary(initial.summaryOfIssue || "");
+      setRootCause(initial.rootCause || ROOT_CAUSES[0]);
+      setSoftMissing(Boolean(initial.softSkillsMissing));
+      setCategories(initial.softSkillsCategories || []);
+      setCoachingNeeded(Boolean(initial.coachingNeeded));
+      setCoachingNotes(initial.coachingNotes || "");
+      setReviewDate(initial.reviewDate || "");
+      return;
+    }
+    setTicketDate("");
+    setTicketNumber("");
+    setAgentId("");
+    setSummary("");
+    setRootCause(ROOT_CAUSES[0]);
+    setSoftMissing(false);
+    setCategories([]);
+    setCoachingNeeded(false);
+    setCoachingNotes("");
+    setReviewDate("");
   }, [open, initial]);
 
   const save = useMutation({
@@ -470,31 +680,33 @@ function ReviewFormDialog({
     setCategories((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
   }
 
+  const fieldLabel = "text-xs font-medium text-muted-foreground";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="px-6 pt-5 pb-2 text-left">
           <DialogTitle>{editId ? "Edit negative review" : "Add negative review"}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 text-sm">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>Ticket Date</Label>
+        <div className="max-h-[min(70vh,34rem)] space-y-4 overflow-y-auto px-6 pb-6 text-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className={fieldLabel}>Ticket date</Label>
               <Input type="date" value={ticketDate} onChange={(e) => setTicketDate(e.target.value)} required />
             </div>
-            <div>
-              <Label>Review Date</Label>
+            <div className="space-y-1.5">
+              <Label className={fieldLabel}>Review date</Label>
               <Input type="date" value={reviewDate} onChange={(e) => setReviewDate(e.target.value)} required />
             </div>
           </div>
-          <div>
-            <Label>Ticket Number</Label>
-            <Input value={ticketNumber} onChange={(e) => setTicketNumber(e.target.value)} required />
+          <div className="space-y-1.5">
+            <Label className={fieldLabel}>Ticket number</Label>
+            <Input value={ticketNumber} onChange={(e) => setTicketNumber(e.target.value)} required autoComplete="off" />
           </div>
-          <div>
-            <Label>Agent</Label>
+          <div className="space-y-1.5">
+            <Label className={fieldLabel}>Agent</Label>
             <Select value={agentId} onValueChange={setAgentId}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select agent" />
               </SelectTrigger>
               <SelectContent>
@@ -506,20 +718,21 @@ function ReviewFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Summary of Issue</Label>
+          <div className="space-y-1.5">
+            <Label className={fieldLabel}>Summary of issue</Label>
             <Textarea
-              rows={4}
+              rows={3}
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="Briefly summarize the customer's issue and what happened."
               required
+              className="min-h-[4.5rem] resize-y"
             />
           </div>
-          <div>
-            <Label>Root Cause of DSAT</Label>
+          <div className="space-y-1.5">
+            <Label className={fieldLabel}>Root cause of DSAT</Label>
             <Select value={rootCause} onValueChange={setRootCause}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -531,67 +744,72 @@ function ReviewFormDialog({
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Soft Skills Missing?</Label>
-            <Select
-              value={softMissing ? "yes" : "no"}
-              onValueChange={(v) => {
-                const yes = v === "yes";
-                setSoftMissing(yes);
-                if (!yes) setCategories([]);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no">No</SelectItem>
-                <SelectItem value="yes">Yes</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className={fieldLabel}>Soft skills missing?</Label>
+              <Select
+                value={softMissing ? "yes" : "no"}
+                onValueChange={(v) => {
+                  const yes = v === "yes";
+                  setSoftMissing(yes);
+                  if (!yes) setCategories([]);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no">No</SelectItem>
+                  <SelectItem value="yes">Yes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className={fieldLabel}>Coaching needed?</Label>
+              <Select value={coachingNeeded ? "yes" : "no"} onValueChange={(v) => setCoachingNeeded(v === "yes")}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no">No</SelectItem>
+                  <SelectItem value="yes">Yes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           {softMissing ? (
-            <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-              <Label>Soft Skills Category</Label>
-              {SOFT_CATEGORIES.map((cat) => (
-                <label key={cat} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={categories.includes(cat)}
-                    onChange={() => toggleCategory(cat)}
-                    className="rounded border-slate-300"
-                  />
-                  {cat}
-                </label>
-              ))}
+            <div className="space-y-2 rounded-xl border border-border bg-muted/30 p-3">
+              <Label className={fieldLabel}>Soft skills category</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {SOFT_CATEGORIES.map((cat) => (
+                  <label key={cat} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={categories.includes(cat)}
+                      onChange={() => toggleCategory(cat)}
+                      className="rounded border-border"
+                    />
+                    {cat}
+                  </label>
+                ))}
+              </div>
             </div>
           ) : null}
-          <div>
-            <Label>Coaching Needed?</Label>
-            <Select value={coachingNeeded ? "yes" : "no"} onValueChange={(v) => setCoachingNeeded(v === "yes")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no">No</SelectItem>
-                <SelectItem value="yes">Yes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           {coachingNeeded ? (
-            <div>
-              <Label>Coaching Notes</Label>
+            <div className="space-y-1.5">
+              <Label className={fieldLabel}>Coaching notes</Label>
               <Textarea
-                rows={4}
+                rows={3}
                 value={coachingNotes}
                 onChange={(e) => setCoachingNotes(e.target.value)}
-                placeholder="What was discussed and what should the Agent improve?"
+                placeholder="What was discussed and what should the agent improve?"
+                className="min-h-[4.5rem] resize-y"
               />
             </div>
           ) : null}
         </div>
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="!mx-0 !mb-0 !flex-row items-center justify-end gap-2 border-t bg-muted/50 px-6 py-4">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={() => save.mutate()} disabled={save.isPending}>
@@ -644,50 +862,89 @@ function ReviewDetailDialog({ id, onClose }: { id: string | null; onClose: () =>
   return (
     <>
       <Dialog open={Boolean(id)} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-3xl">
           {detail.isLoading || !item ? (
-            <LoadingBlock />
+            <div className="p-8">
+              <LoadingBlock />
+            </div>
           ) : (
             <>
-              <DialogHeader>
-                <DialogTitle>Ticket #{item.ticketNumber}</DialogTitle>
-                <DialogDescription>
-                  {item.agentName} · Review {item.reviewDate}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-5 text-sm">
-                <DetailSection title="Ticket">
-                  <p className="text-muted-foreground">Date: {item.ticketDate}</p>
-                  <p className="mt-2 whitespace-pre-wrap leading-relaxed">{item.summaryOfIssue}</p>
-                </DetailSection>
-                <DetailSection title="Review">
-                  <p>Root cause: {item.rootCause}</p>
-                  <p className="mt-1">Soft skills missing: {item.softSkillsMissing ? "Yes" : "No"}</p>
-                  {item.softSkillsCategories.length ? (
-                    <p className="mt-1">Categories: {item.softSkillsCategories.join(", ")}</p>
-                  ) : null}
-                </DetailSection>
-                <DetailSection title="Coaching">
-                  <p>Needed: {item.coachingNeeded ? "Yes" : "No"}</p>
-                  <p className="mt-1 flex items-center gap-2">
-                    Status: <StatusPill value={item.coachingStatus} />
-                  </p>
-                  {item.coachingNotes ? (
-                    <div className="mt-2 rounded-lg bg-muted/50 p-3 whitespace-pre-wrap leading-relaxed">{item.coachingNotes}</div>
-                  ) : null}
-                </DetailSection>
-                <DetailSection title="Agent">
-                  <p>Acknowledged: {item.acknowledgedByAgent ? "Yes" : "No"}</p>
-                </DetailSection>
-                <DetailSection title="Activity">
-                  <ActivityTimeline entries={activity} />
-                </DetailSection>
+              <div className="border-b border-border px-6 py-5">
+                <DialogHeader className="text-left">
+                  <DialogTitle className="text-xl tracking-tight">Ticket #{item.ticketNumber}</DialogTitle>
+                  <DialogDescription className="mt-1 text-sm">
+                    {item.agentName} · Review {item.reviewDate}
+                  </DialogDescription>
+                </DialogHeader>
               </div>
-              <DialogFooter className="gap-2 sm:justify-between">
-                <Button type="button" variant="ghost" onClick={onClose}>
+              <div className="grid gap-8 px-6 py-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+                <section className="space-y-4">
+                  <h3 className="text-sm font-semibold text-foreground">Details</h3>
+                  <dl className="divide-y divide-border/60 rounded-xl border border-border bg-muted/40/50">
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-sm text-muted-foreground">Ticket date</dt>
+                      <dd className="text-sm font-medium text-foreground">{item.ticketDate}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-sm text-muted-foreground">Agent</dt>
+                      <dd className="text-sm font-medium text-foreground">{item.agentName}</dd>
+                    </div>
+                    <TruncatedHoverField
+                      variant="detail"
+                      label="Summary"
+                      popoverTitle="Summary"
+                      value={item.summaryOfIssue}
+                    />
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-sm text-muted-foreground">Root cause</dt>
+                      <dd className="text-sm font-medium text-foreground">{item.rootCause}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-sm text-muted-foreground">Soft skills missing</dt>
+                      <dd className="text-sm font-medium text-foreground">{item.softSkillsMissing ? "Yes" : "No"}</dd>
+                    </div>
+                    {item.softSkillsCategories.length ? (
+                      <div className="flex items-center justify-between gap-4 px-4 py-3">
+                        <dt className="shrink-0 text-sm text-muted-foreground">Categories</dt>
+                        <dd className="text-right text-sm font-medium text-foreground">
+                          {item.softSkillsCategories.join(", ")}
+                        </dd>
+                      </div>
+                    ) : null}
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-sm text-muted-foreground">Coaching needed</dt>
+                      <dd className="text-sm font-medium text-foreground">{item.coachingNeeded ? "Yes" : "No"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="shrink-0 text-sm text-muted-foreground">Coaching status</dt>
+                      <dd className="m-0 shrink-0 text-right">
+                        {item.linkedCoaching ? (
+                          <Link className="text-sm font-medium text-primary hover:underline" to={item.linkedCoaching.href}>
+                            {item.linkedCoaching.status} →
+                          </Link>
+                        ) : (
+                          <StatusPill value={item.coachingStatus} />
+                        )}
+                      </dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <dt className="text-sm text-muted-foreground">Acknowledged</dt>
+                      <dd className="text-sm font-medium text-foreground">{item.acknowledgedByAgent ? "Yes" : "No"}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section className="flex min-h-0 flex-col">
+                  <h3 className="text-sm font-semibold text-foreground">Activity</h3>
+                  <div className="mt-4 max-h-[min(22rem,50vh)] flex-1 overflow-y-auto pr-1">
+                    <ActivityTimeline entries={activity} />
+                  </div>
+                </section>
+              </div>
+              <DialogFooter className="!mx-0 !mb-0 !flex-row flex-nowrap items-center justify-between gap-3 border-t bg-muted/50 px-6 py-4">
+                <Button type="button" variant="outline" onClick={onClose}>
                   Close
                 </Button>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {item.actions?.edit && canMutate("negative_reviews.manage") && !readOnly ? (
                     <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
                       Edit
@@ -695,12 +952,12 @@ function ReviewDetailDialog({ id, onClose }: { id: string | null; onClose: () =>
                   ) : null}
                   {item.actions?.markCoachingDone && !readOnly ? (
                     <Button type="button" onClick={() => coachingDone.mutate()} disabled={coachingDone.isPending}>
-                      Mark Coaching Done
+                      Mark coaching done
                     </Button>
                   ) : null}
                   {item.actions?.acknowledge && !readOnly ? (
                     <Button type="button" onClick={() => acknowledge.mutate()} disabled={acknowledge.isPending}>
-                      Acknowledge Coaching
+                      Acknowledge coaching
                     </Button>
                   ) : null}
                 </div>

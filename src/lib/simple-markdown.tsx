@@ -5,7 +5,7 @@ function inline(text: string) {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-700 underline" target="_blank" rel="noreferrer">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-primary underline" target="_blank" rel="noreferrer">$1</a>');
 }
 
 export function SimpleMarkdown({ content }: { content: string }) {
@@ -65,18 +65,18 @@ export function SimpleMarkdown({ content }: { content: string }) {
     if (!line.trim()) continue;
     if (line.startsWith("## ")) {
       blocks.push(
-        <h2 key={blocks.length} className="mt-6 mb-2 text-xl font-semibold text-slate-900">
+        <h2 key={blocks.length} className="mt-6 mb-2 text-xl font-semibold text-foreground">
           {line.slice(3)}
         </h2>,
       );
     } else if (line.startsWith("# ")) {
       blocks.push(
-        <h1 key={blocks.length} className="mt-6 mb-2 text-2xl font-semibold text-slate-900">
+        <h1 key={blocks.length} className="mt-6 mb-2 text-2xl font-semibold text-foreground">
           {line.slice(2)}
         </h1>,
       );
     } else {
-      blocks.push(<p key={blocks.length} className="my-2 leading-7 text-slate-700" dangerouslySetInnerHTML={{ __html: inline(line) }} />);
+      blocks.push(<p key={blocks.length} className="my-2 leading-7 text-foreground/90" dangerouslySetInnerHTML={{ __html: inline(line) }} />);
     }
   }
   flushList();

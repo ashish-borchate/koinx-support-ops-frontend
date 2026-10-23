@@ -1,6 +1,6 @@
 import { Link, Navigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Empty, ErrorBlock, LoadingBlock, PageHeader } from "@/components/bits";
-import { SupportUpdateCard, type SupportUpdateItem } from "@/components/support-updates-feed";
+import { Empty, ErrorBlock, FilterToolbar, LoadingBlock, PageHeader } from "@/components/bits";
+import { SupportUpdateDetailDialog } from "@/components/support-update-detail-dialog";
+import { SupportUpdateCard, SupportUpdateCardToolbar, type SupportUpdateItem } from "@/components/support-updates-feed";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -25,13 +26,11 @@ const IMPORTANCE = ["Normal", "Important", "Critical"] as const;
 export function SupportUpdatesPage() {
   const { can, canMutate, readOnly } = useAuth();
   const client = useQueryClient();
+  const [searchInput, setSearchInput] = useState("");
   const [q, setQ] = useState("");
-  const [draftQ, setDraftQ] = useState("");
   const [category, setCategory] = useState("");
   const [importance, setImportance] = useState("");
-  const [postedBy, setPostedBy] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [postedDate, setPostedDate] = useState("");
   const [offset, setOffset] = useState(0);
   const [composeOpen, setComposeOpen] = useState(false);
   const [editItem, setEditItem] = useState<SupportUpdateItem | null>(null);
@@ -39,29 +38,46 @@ export function SupportUpdatesPage() {
   const [formCategory, setFormCategory] = useState("");
   const [description, setDescription] = useState("");
   const [formImportance, setFormImportance] = useState<string>("Normal");
+  const [requiresAcknowledgement, setRequiresAcknowledgement] = useState(false);
+  const [detailItem, setDetailItem] = useState<SupportUpdateItem | null>(null);
 
   const meta = useQuery({
     queryKey: ["support-updates-meta"],
     queryFn: () => api<{ categories: string[]; importance: string[]; authors: { id: string; name: string }[] }>("/api/support-updates/meta"),
   });
 
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setQ(searchInput.trim());
+      setOffset(0);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
+
   const list = useQuery({
-    queryKey: ["support-updates", q, category, importance, postedBy, from, to, offset],
+    queryKey: ["support-updates", q, category, importance, postedDate, offset],
     queryFn: () => {
       const params = new URLSearchParams({ limit: "30", offset: String(offset) });
       if (q) params.set("q", q);
       if (category) params.set("category", category);
       if (importance) params.set("importance", importance);
-      if (postedBy) params.set("postedBy", postedBy);
-      if (from) params.set("from", from);
-      if (to) params.set("to", to);
+      if (postedDate) {
+        params.set("from", postedDate);
+        params.set("to", postedDate);
+      }
       return api<{ items: SupportUpdateItem[]; total: number; limit: number; offset: number }>(`/api/support-updates?${params}`);
     },
   });
 
   const save = useMutation({
     mutationFn: () => {
-      const body = { title, category: formCategory, description, importance: formImportance };
+      const body = {
+        title,
+        category: formCategory,
+        description,
+        importance: formImportance,
+        requiresAcknowledgement,
+      };
       if (editItem) {
         return api<{ item: SupportUpdateItem }>(`/api/support-updates/${editItem.id}`, { method: "PUT", body: JSON.stringify(body) });
       }
@@ -111,6 +127,7 @@ export function SupportUpdatesPage() {
     setFormCategory(meta.data?.categories[0] || "");
     setDescription("");
     setFormImportance("Normal");
+    setRequiresAcknowledgement(false);
     setComposeOpen(true);
   }
 
@@ -120,110 +137,104 @@ export function SupportUpdatesPage() {
     setFormCategory(item.category);
     setDescription(item.description || item.descriptionExcerpt);
     setFormImportance(item.importance);
+    setRequiresAcknowledgement(Boolean(item.requiresAcknowledgement));
     setComposeOpen(true);
   }
 
   function resetFilters() {
-    setDraftQ("");
+    setSearchInput("");
     setQ("");
     setCategory("");
     setImportance("");
-    setPostedBy("");
-    setFrom("");
-    setTo("");
+    setPostedDate("");
     setOffset(0);
   }
 
-  return (
-    <div className="mx-auto max-w-3xl space-y-8 pb-12">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <PageHeader eyebrow="Team communication" title="Support Updates" />
-          <p className="mt-2 text-sm text-slate-600">Important information and operational updates for the Support team.</p>
-        </div>
-        {canPost && !readOnly ? (
-          <Button onClick={openCompose}>
-            <Plus className="mr-1 h-4 w-4" />
-            Post Update
-          </Button>
-        ) : null}
-      </div>
+  const hasFilters = Boolean(q || category || importance || postedDate);
 
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="pl-9"
-            placeholder="Search updates…"
-            value={draftQ}
-            onChange={(e) => setDraftQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setQ(draftQ.trim());
+  return (
+    <div className="mx-auto max-w-6xl space-y-5 pb-12">
+      <PageHeader
+        eyebrow="Team communication"
+        title="Support Updates"
+        description="Important information and operational updates for the Support team."
+        className="mb-5"
+      />
+
+      <FilterToolbar
+        showClear={hasFilters}
+        onClear={resetFilters}
+        className="!flex-row !flex-wrap !items-center"
+        search={
+          <div className="relative min-w-[12rem] flex-[1.4]">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-8 w-full pl-9"
+              placeholder="Search updates…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
+        }
+        filters={
+          <>
+            <Select value={category || "all"} onValueChange={(v) => { setCategory(v === "all" ? "" : v); setOffset(0); }}>
+              <SelectTrigger className="h-8 w-[8.75rem]" aria-label="Category"><SelectValue placeholder="Category" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {(meta.data?.categories || []).map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={importance || "all"} onValueChange={(v) => { setImportance(v === "all" ? "" : v); setOffset(0); }}>
+              <SelectTrigger className="h-8 w-[11rem]" aria-label="Importance"><SelectValue placeholder="Importance" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All importance</SelectItem>
+                {IMPORTANCE.map((i) => (
+                  <SelectItem key={i} value={i}>{i}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              className="h-8 w-[8.75rem]"
+              aria-label="Posted date"
+              title="Posted date"
+              value={postedDate}
+              onChange={(e) => {
+                setPostedDate(e.target.value);
                 setOffset(0);
-              }
-            }}
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Select value={category || "all"} onValueChange={(v) => { setCategory(v === "all" ? "" : v); setOffset(0); }}>
-            <SelectTrigger className="w-44"><SelectValue placeholder="Category" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {(meta.data?.categories || []).map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={importance || "all"} onValueChange={(v) => { setImportance(v === "all" ? "" : v); setOffset(0); }}>
-            <SelectTrigger className="w-36"><SelectValue placeholder="Importance" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All importance</SelectItem>
-              {IMPORTANCE.map((i) => (
-                <SelectItem key={i} value={i}>{i}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={postedBy || "all"} onValueChange={(v) => { setPostedBy(v === "all" ? "" : v); setOffset(0); }}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Posted by" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Anyone</SelectItem>
-              {(meta.data?.authors || []).map((a) => (
-                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input type="date" className="w-36" value={from} onChange={(e) => { setFrom(e.target.value); setOffset(0); }} />
-          <Input type="date" className="w-36" value={to} onChange={(e) => { setTo(e.target.value); setOffset(0); }} />
-          <Button variant="secondary" size="sm" onClick={() => { setQ(draftQ.trim()); setOffset(0); }}>Search</Button>
-          <Button variant="ghost" size="sm" onClick={resetFilters}>Reset</Button>
-        </div>
-      </div>
+              }}
+            />
+            {canPost && !readOnly ? (
+              <Button type="button" size="sm" className="h-8 gap-1 sm:ml-auto" onClick={openCompose}>
+                <Plus className="size-3.5" />
+                Post Update
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {items.length === 0 ? (
-        <div className="space-y-3">
-          <Empty title="No support updates yet." body={canPost ? "Post an update when there is something the Support team needs to know." : ""} />
-          {canPost && !readOnly ? <Button onClick={openCompose}>Post Update</Button> : null}
-        </div>
+        <Empty
+          title="No support updates yet."
+          body={canPost ? "Post an update when there is something the Support team needs to know." : ""}
+          bodyClassName="max-w-none whitespace-nowrap"
+        />
       ) : (
         <div className="space-y-4">
           {items.map((item) => (
-            <SupportUpdateCard key={item.id} item={item}>
-              {!readOnly && (item.actions?.edit || item.actions?.delete || item.actions?.pin) ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {item.actions?.edit ? (
-                    <Button size="sm" variant="outline" onClick={() => openEdit(item)}>Edit</Button>
-                  ) : null}
-                  {item.actions?.pin ? (
-                    <Button size="sm" variant="outline" onClick={() => pin.mutate({ id: item.id, pinned: !item.pinned })}>
-                      {item.pinned ? "Unpin" : "Pin"}
-                    </Button>
-                  ) : null}
-                  {item.actions?.delete ? (
-                    <Button size="sm" variant="destructive" onClick={() => remove.mutate(item.id)}>Delete</Button>
-                  ) : null}
-                </div>
-              ) : null}
+            <SupportUpdateCard key={item.id} item={item} ackInToolbar onOpenDetail={() => setDetailItem(item)}>
+              <SupportUpdateCardToolbar
+                item={item}
+                readOnly={readOnly}
+                onView={() => setDetailItem(item)}
+                onEdit={() => openEdit(item)}
+                onPin={() => pin.mutate({ id: item.id, pinned: !item.pinned })}
+                onDelete={() => remove.mutate(item.id)}
+              />
             </SupportUpdateCard>
           ))}
           {offset + items.length < total ? (
@@ -270,6 +281,20 @@ export function SupportUpdatesPage() {
               <Label>Description</Label>
               <Textarea rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
+            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={requiresAcknowledgement}
+                onChange={(e) => setRequiresAcknowledgement(e.target.checked)}
+              />
+              <span className="space-y-1">
+                <span className="block text-sm font-medium text-foreground">Require acknowledgement</span>
+                <span className="block text-xs text-muted-foreground">
+                  Team members will be asked to confirm they have read this update.
+                </span>
+              </span>
+            </label>
           </div>
           <DialogFooter>
             <Button disabled={save.isPending || title.length < 3 || !formCategory || description.length < 3} onClick={() => save.mutate()}>
@@ -279,7 +304,15 @@ export function SupportUpdatesPage() {
         </DialogContent>
       </Dialog>
 
-      <Link to="/" className="text-sm text-blue-700">← Dashboard</Link>
+      <SupportUpdateDetailDialog
+        item={detailItem}
+        open={Boolean(detailItem)}
+        onOpenChange={(open) => {
+          if (!open) setDetailItem(null);
+        }}
+      />
+
+      <Link to="/" className="text-sm text-primary">← Dashboard</Link>
     </div>
   );
 }

@@ -16,10 +16,10 @@ const prefetchers: Record<string, (qc: QueryClient, ctx: { userId?: string }) =>
   "/": (qc, ctx) => {
     void qc.prefetchQuery(dashboardQuery(ctx.userId));
   },
-  "/support-actions": (qc) => {
+  "/reported-issues": (qc) => {
     void qc.prefetchQuery({
-      queryKey: ["support-actions"],
-      queryFn: () => api("/api/support-actions"),
+      queryKey: ["reported-issues"],
+      queryFn: () => api("/api/reported-issues?limit=40"),
       staleTime: STALE.operational,
     });
   },
@@ -73,6 +73,40 @@ const prefetchers: Record<string, (qc: QueryClient, ctx: { userId?: string }) =>
     });
   },
 };
+
+/** Prefetch a linked record (product guide, integration, KB article) before navigation. */
+export function prefetchRecordHref(qc: QueryClient, href: string) {
+  const path = href.split("?")[0];
+  const productGuide = path.match(/^\/product-guides\/([a-f\d]{24})$/i);
+  if (productGuide) {
+    const id = productGuide[1];
+    void qc.prefetchQuery({
+      queryKey: ["product-guide", id],
+      queryFn: () => api(`/api/product-guides/${id}`),
+      staleTime: STALE.reference,
+    });
+    return;
+  }
+  const integration = path.match(/^\/integration-steps\/([a-f\d]{24})$/i);
+  if (integration) {
+    const id = integration[1];
+    void qc.prefetchQuery({
+      queryKey: ["is-detail", id],
+      queryFn: () => api(`/api/integration-steps/${id}`),
+      staleTime: STALE.reference,
+    });
+    return;
+  }
+  const kb = path.match(/^\/knowledge-base\/([a-f\d]{24})$/i);
+  if (kb) {
+    const id = kb[1];
+    void qc.prefetchQuery({
+      queryKey: ["knowledge-base", id],
+      queryFn: () => api(`/api/knowledge-base/${id}`),
+      staleTime: STALE.reference,
+    });
+  }
+}
 
 /** Prefetch main module query on nav hover/focus when data is stale. */
 export function prefetchRoute(qc: QueryClient, path: string, ctx: { userId?: string }) {

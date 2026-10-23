@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,20 +20,37 @@ export function PeoplePage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
+  const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const [showArchived, setShowArchived] = useState(true);
   const users = useQuery({ queryKey: ["users-admin"], queryFn: () => api<{ users: UserRow[] }>("/api/users") });
   const roles = useQuery({ queryKey: ["roles"], queryFn: () => api<{ roles: Role[] }>("/api/roles"), enabled: canMutate("users.manage") });
   const toggle = useMutation({
     mutationFn: (person: UserRow) => api(`/api/users/${person.id}`, { method: "PATCH", body: JSON.stringify({ active: !person.active }) }),
-    onSuccess: () => void client.invalidateQueries({ queryKey: ["users-admin"] }),
+    onSuccess: (_, person) => {
+      toast.success(person.active ? "User archived" : "User restored");
+      void client.invalidateQueries({ queryKey: ["users-admin"] });
+    },
     onError: (error) => toast.error(error.message),
   });
   const assignable = new Set((roles.data?.roles || []).filter((role) => role.assignable).map((role) => role.key));
+  const visibleUsers =
+    users.data?.users.filter((person) => showArchived || person.active) ?? [];
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Management"
         title="Users"
-        action={canMutate("users.manage") ? <Button onClick={() => setOpen(true)}>Add user</Button> : null}
+        action={
+          canMutate("users.manage") ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                Show archived
+              </label>
+              <Button onClick={() => setOpen(true)}>Add user</Button>
+            </div>
+          ) : null
+        }
       />
       {users.isLoading ? <LoadingBlock /> : null}
       {users.isError ? <ErrorBlock message={users.error.message} /> : null}
@@ -51,7 +67,7 @@ export function PeoplePage() {
             </tr>
           </thead>
           <tbody>
-            {users.data?.users.map((person) => {
+            {visibleUsers.map((person) => {
               const manageable = canMutate("users.manage") && assignable.has(person.roleKey) && person.id !== actor?.id;
               return (
                 <tr key={person.id} className="border-t">
@@ -61,14 +77,15 @@ export function PeoplePage() {
                   </td>
                   <td className="px-3 py-3">{person.email}</td>
                   <td className="px-3 py-3">{person.roleName}</td>
-                  <td className="px-3 py-3">{person.active ? "Active" : "Inactive"}</td>
+                  <td className="px-3 py-3">{person.active ? "Active" : "Archived"}</td>
                   <td className="px-3 py-3">{person.createdAt ? formatWhen(person.createdAt) : "—"}</td>
                   <td className="px-3 py-3">
                     {manageable ? (
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" onClick={() => setEditing(person)}>Edit</Button>
-                        <Button variant="outline" size="sm" onClick={() => toggle.mutate(person)}>{person.active ? "Deactivate" : "Activate"}</Button>
+                        <Button variant="outline" size="sm" onClick={() => toggle.mutate(person)}>{person.active ? "Archive" : "Restore"}</Button>
                         {canMutate("users.reset_password") ? <Button variant="outline" size="sm" onClick={() => setResetting(person)}>Reset password</Button> : null}
+                        <Button variant="outline" size="sm" className="text-rose-700" onClick={() => setDeleting(person)}>Delete</Button>
                       </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
@@ -83,6 +100,7 @@ export function PeoplePage() {
       {open && roles.data ? <UserDialog roles={roles.data.roles.filter((role) => role.assignable)} onClose={() => setOpen(false)} /> : null}
       {editing && roles.data ? <UserDialog roles={roles.data.roles.filter((role) => role.assignable)} person={editing} onClose={() => setEditing(null)} /> : null}
       {resetting ? <ResetPassword person={resetting} onClose={() => setResetting(null)} /> : null}
+      {deleting ? <DeleteUser person={deleting} onClose={() => setDeleting(null)} /> : null}
     </div>
   );
 }
@@ -130,10 +148,45 @@ function UserDialog({ roles, person, onClose }: { roles: Role[]; person?: UserRo
           )}
           <label className="mt-2 flex items-center gap-2 text-sm">
             <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
-            Active
+            Active (uncheck to archive — they cannot sign in)
           </label>
         </div>
         <DialogFooter><Button onClick={() => save.mutate()} disabled={save.isPending}>{person ? "Save" : "Create"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteUser({ person, onClose }: { person: UserRow; onClose: () => void }) {
+  const client = useQueryClient();
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const remove = useMutation({
+    mutationFn: () => api(`/api/users/${person.id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast.success("User deleted");
+      void client.invalidateQueries({ queryKey: ["users-admin"] });
+      onClose();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const emailOk = confirmEmail.trim().toLowerCase() === (person.email || "").toLowerCase();
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Delete {person.name}?</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          This permanently removes the account. Their KPI, legacy task ownership, and assignments are moved to other team members where needed. Prefer <strong>Archive</strong> if they may return.
+        </p>
+        <div className="grid gap-2">
+          <Label>Type {person.email} to confirm</Label>
+          <Input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} autoComplete="off" />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={() => remove.mutate()} disabled={!emailOk || remove.isPending}>
+            Delete permanently
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -166,74 +219,5 @@ function ResetPassword({ person, onClose }: { person: UserRow; onClose: () => vo
         <DialogFooter><Button onClick={() => save.mutate()} disabled={save.isPending}>Reset password</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-type Sync = { _id: string; status: string; trigger: string; message: string; error?: string; startedAt: string; finishedAt?: string };
-
-export function FreshdeskPage() {
-  const { canMutate } = useAuth();
-  const client = useQueryClient();
-  const query = useQuery({
-    queryKey: ["freshdesk-syncs"],
-    queryFn: () => api<{ configured: boolean; latest: Sync | null; syncs: Sync[] }>("/api/freshdesk/syncs"),
-  });
-  const run = useMutation({
-    mutationFn: () => api("/api/freshdesk/sync", { method: "POST" }),
-    onSuccess: () => {
-      toast.success("Sync finished");
-      void client.invalidateQueries({ queryKey: ["freshdesk-syncs"] });
-      void client.invalidateQueries({ queryKey: ["kpi"] });
-      void client.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-    onError: (error) => toast.error(error.message),
-  });
-  return (
-    <div className="space-y-4">
-      <PageHeader eyebrow="Integration" title="Freshdesk" action={canMutate("freshdesk.manage") ? <Button onClick={() => run.mutate()} disabled={run.isPending}>{run.isPending ? "Syncing…" : "Sync now"}</Button> : null} />
-      {query.isLoading ? <LoadingBlock /> : null}
-      {query.isError ? <ErrorBlock message={query.error.message} /> : null}
-      {query.data ? (
-        <>
-          <Card>
-            <CardHeader><CardTitle>{query.data.configured ? "Credentials are set" : "Credentials are not set"}</CardTitle></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              The API key stays on the server. This screen never receives it. Without FRESHDESK_DOMAIN and FRESHDESK_API_KEY, a sync is recorded as skipped and the sample history stays in place.
-            </CardContent>
-          </Card>
-          <div className="space-y-2">
-            {query.data.syncs.map((sync) => (
-              <article key={sync._id} className="rounded-2xl border bg-card px-4 py-3 text-sm">
-                <p className="font-medium capitalize">{sync.status} · {sync.trigger} · {formatWhen(sync.finishedAt || sync.startedAt)}</p>
-                <p className="text-muted-foreground">{sync.message}</p>
-                {sync.error ? <p className="text-rose-700">{sync.error}</p> : null}
-              </article>
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-export function AuditPage() {
-  const query = useQuery({
-    queryKey: ["audit"],
-    queryFn: () => api<{ logs: { id: string; actorName: string; summary: string; createdAt: string }[] }>("/api/audit"),
-  });
-  return (
-    <div>
-      <PageHeader eyebrow="History" title="Audit log" />
-      {query.isLoading ? <LoadingBlock /> : null}
-      {query.isError ? <ErrorBlock message={query.error.message} /> : null}
-      <div className="space-y-2">
-        {query.data?.logs.map((log) => (
-          <article key={log.id} className="rounded-2xl border bg-card px-4 py-3">
-            <p className="text-sm">{log.summary}</p>
-            <p className="text-xs text-muted-foreground">{log.actorName} · {formatWhen(log.createdAt)}</p>
-          </article>
-        ))}
-      </div>
-    </div>
   );
 }

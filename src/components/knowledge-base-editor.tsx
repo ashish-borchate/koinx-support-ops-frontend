@@ -54,7 +54,7 @@ export function KnowledgeBaseEditor({ value, onChange, readOnly }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1 rounded-lg border bg-slate-50 p-2">
+      <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-muted/40 p-2">
         <Button type="button" size="sm" variant="outline" onClick={() => exec("bold")}>
           Bold
         </Button>
@@ -87,11 +87,11 @@ export function KnowledgeBaseEditor({ value, onChange, readOnly }: Props) {
         ref={ref}
         contentEditable
         suppressContentEditableWarning
-        className="min-h-[420px] rounded-xl border bg-white p-6 text-[15px] leading-7 outline-none focus:ring-2 focus:ring-blue-200"
+        className="min-h-[420px] rounded-xl border border-border bg-card p-6 text-[15px] leading-7 outline-none focus:ring-2 focus:ring-blue-200"
         onInput={sync}
         onPaste={() => setTimeout(sync, 0)}
       />
-      <p className="text-xs text-slate-500">Paste from Notion or other editors — formatting is preserved where possible and sanitized on save.</p>
+      <p className="text-xs text-muted-foreground">Paste from Notion or other editors — formatting is preserved where possible and sanitized on save.</p>
     </div>
   );
 }

@@ -25,7 +25,7 @@ export function ResponsibilitiesBoard({ groups }: { groups: ResponsibilityGroups
       {columns.map(({ key, label, icon: Icon }) => {
         const items = groups[key];
         if (!items.length) return null;
-        const shut = collapsed[key] ?? false;
+        const shut = collapsed[key] ?? true;
         return (
           <div key={key} className={cn(surfaceCard, "flex flex-col overflow-hidden p-0")}>
             <button

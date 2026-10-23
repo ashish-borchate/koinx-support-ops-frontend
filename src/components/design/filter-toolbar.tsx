@@ -11,6 +11,7 @@ export function FilterToolbar({
   showClear,
   trailing,
   className,
+  searchClassName,
 }: {
   search?: ReactNode;
   filters?: ReactNode;
@@ -18,10 +19,13 @@ export function FilterToolbar({
   showClear?: boolean;
   trailing?: ReactNode;
   className?: string;
+  searchClassName?: string;
 }) {
   return (
     <div className={cn(surfaceCard, "flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center", className)}>
-      {search ? <div className="min-w-[200px] flex-1 sm:max-w-md">{search}</div> : null}
+      {search ? (
+        <div className={cn("min-w-[200px] flex-1 sm:max-w-md", searchClassName)}>{search}</div>
+      ) : null}
       {filters ? <div className="flex flex-wrap items-center gap-2">{filters}</div> : null}
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
         {showClear && onClear ? (

@@ -40,7 +40,7 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-emerald-50 text-emerald-800"
       : status === "Needs Update"
         ? "bg-amber-50 text-amber-900"
-        : "bg-slate-100 text-slate-600";
+        : "bg-muted text-muted-foreground";
   return <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${tone}`}>{status}</span>;
 }
 
@@ -99,11 +99,11 @@ export function KnowledgeBaseLibraryPage() {
   const canManage = can("knowledge_base.manage");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <PageHeader eyebrow="Internal reference" title="Knowledge Base" />
-          <p className="mt-2 max-w-xl text-sm text-slate-600">
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
             Internal learning and reference material for the Support team.
           </p>
         </div>
@@ -117,9 +117,9 @@ export function KnowledgeBaseLibraryPage() {
         ) : null}
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="space-y-3 rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] p-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
             placeholder="Search Knowledge Base…"
@@ -217,22 +217,22 @@ export function KnowledgeBaseLibraryPage() {
         <div className="space-y-10">
           {grouped.map(([cat, articles]) => (
             <section key={cat}>
-              <h2 className="mb-3 text-lg font-semibold text-slate-900">{cat}</h2>
+              <h2 className="mb-3 text-lg font-semibold text-foreground">{cat}</h2>
               <ul className="space-y-2">
                 {articles.map((article) => (
                   <li key={article.id}>
                     <Link
                       to={`/knowledge-base/${article.id}`}
-                      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-blue-200 hover:bg-blue-50/30"
+                      className="flex items-start gap-3 rounded-xl border border-border bg-card shadow-[var(--shadow-card)] px-4 py-3 hover:border-primary/30 hover:bg-primary/5"
                     >
-                      <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                      <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium text-slate-900">{article.title}</p>
+                          <p className="font-medium text-foreground">{article.title}</p>
                           {canManage ? <StatusBadge status={article.status} /> : null}
                         </div>
                         {article.contentPreview ? (
-                          <p className="mt-1 line-clamp-2 text-sm text-slate-600">{article.contentPreview}</p>
+                          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{article.contentPreview}</p>
                         ) : null}
                       </div>
                     </Link>
@@ -276,13 +276,13 @@ function KnowledgeBaseDetailPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-12">
-      <Link to="/knowledge-base" className="text-sm text-blue-700">
+      <Link to="/knowledge-base" className="text-sm text-primary">
         ← Knowledge Base
       </Link>
-      <header className="space-y-2 border-b border-slate-200 pb-6">
-        <p className="text-sm font-medium text-blue-700">{item.category}</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{item.title}</h1>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+      <header className="space-y-2 border-b border-border pb-6">
+        <p className="text-sm font-medium text-primary">{item.category}</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">{item.title}</h1>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           {can("knowledge_base.manage") ? <StatusBadge status={item.status} /> : null}
           <span>Updated {formatWhen(item.updatedAt)}</span>
           {item.updatedByName ? <span>· {item.updatedByName}</span> : null}
@@ -326,12 +326,12 @@ function KnowledgeBaseDetailPage() {
       <KnowledgeBaseContent html={item.contentHtml} />
 
       {item.relatedLinks.length > 0 ? (
-        <section className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-          <h2 className="text-sm font-semibold text-slate-900">Related links</h2>
+        <section className="rounded-xl border border-border bg-muted/40/50 p-4">
+          <h2 className="text-sm font-semibold text-foreground">Related links</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {item.relatedLinks.map((link) => (
               <li key={link.id || link.url}>
-                <a href={link.url} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+                <a href={link.url} target="_blank" rel="noreferrer" className="text-primary underline">
                   {link.label}
                 </a>
               </li>

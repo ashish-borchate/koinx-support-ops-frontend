@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,43 @@ type UserRow = {
 };
 type Role = { key: string; name: string; description: string; assignable: boolean };
 
+const ROLE_SECTION_ORDER = ["admin", "supervisor", "senior_agent", "agent", "tech_agent"] as const;
+
+function roleSectionIndex(roleKey: string) {
+  const index = ROLE_SECTION_ORDER.indexOf(roleKey as (typeof ROLE_SECTION_ORDER)[number]);
+  return index === -1 ? ROLE_SECTION_ORDER.length : index;
+}
+
+function groupUsersByRole(users: UserRow[]) {
+  const byRole = new Map<string, UserRow[]>();
+  for (const person of users) {
+    const bucket = byRole.get(person.roleKey) ?? [];
+    bucket.push(person);
+    byRole.set(person.roleKey, bucket);
+  }
+
+  const groups: { roleKey: string; roleName: string; users: UserRow[] }[] = [];
+  for (const roleKey of ROLE_SECTION_ORDER) {
+    const members = byRole.get(roleKey);
+    if (!members?.length) continue;
+    members.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    groups.push({ roleKey, roleName: members[0]?.roleName || roleKey, users: members });
+    byRole.delete(roleKey);
+  }
+
+  const unknown = [...byRole.entries()].sort(([a], [b]) => roleSectionIndex(a) - roleSectionIndex(b) || a.localeCompare(b));
+  for (const [roleKey, members] of unknown) {
+    members.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    groups.push({ roleKey, roleName: members[0]?.roleName || roleKey, users: members });
+  }
+
+  return groups;
+}
+
+function sortRolesForSelect(roles: Role[]) {
+  return [...roles].sort((a, b) => roleSectionIndex(a.key) - roleSectionIndex(b.key) || a.name.localeCompare(b.name));
+}
+
 export function PeoplePage() {
   const { canMutate, user: actor } = useAuth();
   const client = useQueryClient();
@@ -43,8 +80,41 @@ export function PeoplePage() {
     onError: (error) => toast.error(error.message),
   });
   const assignable = new Set((roles.data?.roles || []).filter((role) => role.assignable).map((role) => role.key));
-  const visibleUsers =
-    users.data?.users.filter((person) => showArchived || person.active) ?? [];
+  const visibleUsers = users.data?.users.filter((person) => showArchived || person.active) ?? [];
+  const userGroups = groupUsersByRole(visibleUsers);
+
+  function renderUserRow(person: UserRow) {
+    const manageable = canMutate("users.manage") && assignable.has(person.roleKey) && person.id !== actor?.id;
+    return (
+      <tr key={person.id} className="border-t">
+        <td className="px-4 py-3">
+          <p className="font-medium">{person.name}</p>
+          <p className="text-xs text-muted-foreground">{person.title}</p>
+        </td>
+        <td className="px-3 py-3">{person.email}</td>
+        <td className="px-3 py-3">{person.roleName}</td>
+        <td className="px-3 py-3">{person.active ? "Active" : "Archived"}</td>
+        <td className="px-3 py-3">
+          {!person.active ? "—" : person.emailVerified ? "Activated" : "Invite pending"}
+        </td>
+        <td className="px-3 py-3">{person.createdAt ? formatWhen(person.createdAt) : "—"}</td>
+        <td className="px-3 py-3">
+          {manageable ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setEditing(person)}>Edit</Button>
+              <Button variant="outline" size="sm" onClick={() => toggle.mutate(person)}>{person.active ? "Archive" : "Restore"}</Button>
+              {canMutate("users.reset_password") ? <Button variant="outline" size="sm" onClick={() => setResetting(person)}>Send reset link</Button> : null}
+              {canMutate("users.manage") && person.active && !person.emailVerified ? <ResendInviteButton person={person} /> : null}
+              <Button variant="outline" size="sm" className="text-rose-700" onClick={() => setDeleting(person)}>Delete</Button>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -78,39 +148,17 @@ export function PeoplePage() {
             </tr>
           </thead>
           <tbody>
-            {visibleUsers.map((person) => {
-              const manageable = canMutate("users.manage") && assignable.has(person.roleKey) && person.id !== actor?.id;
-              return (
-                <tr key={person.id} className="border-t">
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{person.name}</p>
-                    <p className="text-xs text-muted-foreground">{person.title}</p>
-                  </td>
-                  <td className="px-3 py-3">{person.email}</td>
-                  <td className="px-3 py-3">{person.roleName}</td>
-                  <td className="px-3 py-3">{person.active ? "Active" : "Archived"}</td>
-                  <td className="px-3 py-3">
-                    {!person.active ? "—" : person.emailVerified ? "Activated" : "Invite pending"}
-                  </td>
-                  <td className="px-3 py-3">{person.createdAt ? formatWhen(person.createdAt) : "—"}</td>
-                  <td className="px-3 py-3">
-                    {manageable ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setEditing(person)}>Edit</Button>
-                        <Button variant="outline" size="sm" onClick={() => toggle.mutate(person)}>{person.active ? "Archive" : "Restore"}</Button>
-                        {canMutate("users.reset_password") ? <Button variant="outline" size="sm" onClick={() => setResetting(person)}>Send reset link</Button> : null}
-                        {canMutate("users.manage") && person.active && !person.emailVerified ? (
-                          <ResendInviteButton person={person} />
-                        ) : null}
-                        <Button variant="outline" size="sm" className="text-rose-700" onClick={() => setDeleting(person)}>Delete</Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+            {userGroups.map((group) => (
+              <Fragment key={group.roleKey}>
+                <tr className="border-t bg-muted/30">
+                  <td colSpan={7} className="px-4 py-2.5">
+                    <p className="text-xs font-semibold tracking-wide text-primary uppercase">{group.roleName}</p>
+                    <p className="text-[11px] text-muted-foreground">{group.users.length} {group.users.length === 1 ? "person" : "people"}</p>
                   </td>
                 </tr>
-              );
-            })}
+                {group.users.map((person) => renderUserRow(person))}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>
@@ -158,7 +206,7 @@ function UserDialog({ roles, person, onClose }: { roles: Role[]; person?: UserRo
           <Label>Role</Label>
           <Select value={roleKey} onValueChange={setRoleKey}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>{roles.map((role) => <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>)}</SelectContent>
+            <SelectContent>{sortRolesForSelect(roles).map((role) => <SelectItem key={role.key} value={role.key}>{role.name}</SelectItem>)}</SelectContent>
           </Select>
           {person ? null : (
             <p className="text-sm text-muted-foreground">

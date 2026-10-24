@@ -18,6 +18,7 @@ import { LoginPage } from "@/pages/login";
 import { AcceptInvitePage } from "@/pages/accept-invite";
 import { ForgotPasswordPage } from "@/pages/forgot-password";
 import { ResetPasswordPage } from "@/pages/reset-password";
+import { PrivacyPolicyPage } from "@/pages/privacy";
 import { QaDetailPage, QaFormPage, QaListPage } from "@/pages/qa";
 import { QaRandomAuditsPage } from "@/pages/qa-random-audits";
 import { QaAppealDetailPage, QaAppealsPage } from "@/pages/qa-appeals";
@@ -75,6 +76,7 @@ export default function App() {
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route element={<AuthLayout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/account" element={<ProfilePage />} />

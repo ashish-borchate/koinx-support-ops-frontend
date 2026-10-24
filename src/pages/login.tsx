@@ -58,7 +58,8 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-svh bg-background lg:grid-cols-2">
+    <div className="flex min-h-svh flex-col bg-background">
+      <div className="grid flex-1 lg:grid-cols-2">
       <section className="hidden flex-col justify-between border-r border-border bg-card px-14 py-12 lg:flex">
         <div>
           <p className="text-sm font-semibold text-primary">KoinX</p>
@@ -130,6 +131,10 @@ export function LoginPage() {
           </div>
         </div>
       </section>
+      </div>
+      <footer className="border-t border-border px-6 py-4 text-center text-xs text-muted-foreground">
+        <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+      </footer>
     </div>
   );
 }

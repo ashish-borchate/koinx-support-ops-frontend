@@ -134,11 +134,12 @@ function UserDialog({ roles, person, onClose }: { roles: Role[]; person?: UserRo
         await api(`/api/users/${person.id}`, { method: "PATCH", body: JSON.stringify({ name, email, roleKey, active }) });
         return null;
       }
-      return api<{ devInvitePath?: string }>("/api/users", { method: "POST", body: JSON.stringify({ name, email, roleKey, active }) });
+      return api<{ devInvitePath?: string; delivery?: string }>("/api/users", { method: "POST", body: JSON.stringify({ name, email, roleKey, active }) });
     },
     onSuccess: (data) => {
       if (person) toast.success("User updated");
-      else if (data && data.devInvitePath) toast.success(`Invitation created. Dev link: ${data.devInvitePath}`);
+      else if (data?.devInvitePath) toast.success(`Invitation created. Dev link: ${data.devInvitePath}`);
+      else if (data?.delivery === "google") toast.success("Employee added. They can sign in with Google using this email.");
       else toast.success("Invitation email sent");
       void client.invalidateQueries({ queryKey: ["users-admin"] });
       onClose();
@@ -161,7 +162,8 @@ function UserDialog({ roles, person, onClose }: { roles: Role[]; person?: UserRo
           </Select>
           {person ? null : (
             <p className="text-sm text-muted-foreground">
-              We will email a single-use activation link. The employee sets their own password before signing in.
+              If email delivery is configured, we send a password activation link. Otherwise the employee signs in with Google using this
+              exact email address.
             </p>
           )}
           <label className="mt-2 flex items-center gap-2 text-sm">

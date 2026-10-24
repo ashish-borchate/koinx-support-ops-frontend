@@ -15,6 +15,9 @@ import { TokenMigrationRoutes } from "@/pages/token-migration";
 import { KnowledgeBaseRoutes } from "@/pages/knowledge-base";
 import { PasswordPage, ProfilePage, ViewAsPage } from "@/pages/account";
 import { LoginPage } from "@/pages/login";
+import { AcceptInvitePage } from "@/pages/accept-invite";
+import { ForgotPasswordPage } from "@/pages/forgot-password";
+import { ResetPasswordPage } from "@/pages/reset-password";
 import { QaDetailPage, QaFormPage, QaListPage } from "@/pages/qa";
 import { QaRandomAuditsPage } from "@/pages/qa-random-audits";
 import { QaAppealDetailPage, QaAppealsPage } from "@/pages/qa-appeals";
@@ -69,6 +72,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/accept-invite" element={<AcceptInvitePage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<AuthLayout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/account" element={<ProfilePage />} />

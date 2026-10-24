@@ -32,6 +32,7 @@ type AuthState = {
   loading: boolean;
   readOnly: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
   can: (...keys: string[]) => boolean;
   canMutate: (...keys: string[]) => boolean;
@@ -81,16 +82,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  async function applyLoginResponse(data: { token: string; user: AuthUser; effective: AuthUser; viewAs: ViewAsUser | null }) {
+    setToken(data.token);
+    setUser(data.user);
+    setEffective(data.effective);
+    setViewAsUser(data.viewAs);
+  }
+
   async function login(email: string, password: string) {
     setViewAs(null);
     const data = await api<{ token: string; user: AuthUser; effective: AuthUser; viewAs: ViewAsUser | null }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    setToken(data.token);
-    setUser(data.user);
-    setEffective(data.effective);
-    setViewAsUser(null);
+    await applyLoginResponse({ ...data, viewAs: null });
+  }
+
+  async function loginWithGoogle(credential: string) {
+    setViewAs(null);
+    const data = await api<{ token: string; user: AuthUser; effective: AuthUser; viewAs: ViewAsUser | null }>("/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    });
+    await applyLoginResponse({ ...data, viewAs: null });
   }
 
   function logout() {
@@ -126,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, effective, viewAs, loading, readOnly: Boolean(viewAs), login, logout, can, canMutate, startViewAs, exitViewAs, refresh }}
+      value={{ user, effective, viewAs, loading, readOnly: Boolean(viewAs), login, loginWithGoogle, logout, can, canMutate, startViewAs, exitViewAs, refresh }}
     >
       {children}
     </AuthContext.Provider>

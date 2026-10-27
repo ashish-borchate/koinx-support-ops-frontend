@@ -106,14 +106,44 @@ function hasOpenCoaching(review: Review) {
   return Boolean(review.coachingRequired) || review.coachingItems.some((item) => item.status === "open");
 }
 
-function QaSummaryCard({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-card px-3 py-2.5 shadow-[var(--shadow-card)]">
+function QaSummaryCard({
+  label,
+  value,
+  note,
+  selected,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  selected?: boolean;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const className = cn(
+    "w-full rounded-lg border border-border/60 bg-card px-3 py-2.5 text-left shadow-[var(--shadow-card)]",
+    onClick && !disabled && "cursor-pointer transition-colors",
+    onClick && !disabled && !selected && "hover:bg-muted/30",
+    onClick && !disabled && selected && "hover:bg-primary/30",
+    selected && "border-transparent bg-primary/25 shadow-none dark:bg-primary/30",
+    disabled && "cursor-not-allowed opacity-50",
+  );
+  const inner = (
+    <>
       <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums tracking-tight text-foreground">{value}</p>
       {note ? <p className="mt-1 text-[11px] text-muted-foreground">{note}</p> : null}
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" className={className} onClick={onClick} disabled={disabled} aria-pressed={selected}>
+        {inner}
+      </button>
+    );
+  }
+  return <div className={className}>{inner}</div>;
 }
 
 export function QaListPage() {
@@ -136,12 +166,17 @@ export function QaListPage() {
   const [agentFilter, setAgentFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [searchQ, setSearchQ] = useState("");
+  const [coachingOnly, setCoachingOnly] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => setSearchQ(search.trim()), 250);
     return () => window.clearTimeout(handle);
   }, [search]);
+
+  useEffect(() => {
+    setCoachingOnly(false);
+  }, [week, month, periodType, agentFilter, qaMode]);
 
   const workflowSummary = useQaWorkflowSummary();
 
@@ -180,8 +215,11 @@ export function QaListPage() {
     if (criticalOnly) {
       list = list.filter((review) => review.criticalError?.flagged);
     }
+    if (coachingOnly) {
+      list = list.filter((review) => hasOpenCoaching(review));
+    }
     return list;
-  }, [query.data, searchQ, ackFilter, criticalOnly]);
+  }, [query.data, searchQ, ackFilter, criticalOnly, coachingOnly]);
 
   const visibleStats = useMemo(() => {
     if (query.data && !searchQ) {
@@ -228,10 +266,12 @@ export function QaListPage() {
       ? `${Math.round((visibleStats.coachingNeeded / visibleStats.reviewsCompleted) * 100)}% of reviews`
       : undefined;
 
-  const emptyMessage = searchQ
-    ? "No QA evaluations match these filters."
-    : agentFilter !== "all"
-      ? "No QA evaluations for this period."
+  const emptyMessage = coachingOnly
+    ? "No QA evaluations need coaching for this period."
+    : searchQ
+      ? "No QA evaluations match these filters."
+      : agentFilter !== "all"
+        ? "No QA evaluations for this period."
       : periodType === "weekly"
         ? "No QA evaluations for this week."
         : "No QA evaluations for this month.";
@@ -325,7 +365,10 @@ export function QaListPage() {
             <QaSummaryCard
               label="Need coaching"
               value={formatNumber(visibleStats.coachingNeeded, 0)}
-              note={coachingPct}
+              note={coachingOnly ? "Filter on · click to clear" : coachingPct}
+              selected={coachingOnly}
+              disabled={visibleStats.coachingNeeded === 0}
+              onClick={() => setCoachingOnly((on) => !on)}
             />
             {teamView ? (
               <QaSummaryCard

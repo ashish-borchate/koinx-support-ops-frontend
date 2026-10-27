@@ -63,6 +63,7 @@ const groups: NavGroup[] = [
     label: "Overview",
     links: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, any: [] },
+      { to: "/handbook", label: "Handbook", icon: GraduationCap, any: [] },
       { to: "/management", label: "Management Overview", icon: LineChart, any: ["management.view"] },
       { to: "/support-updates", label: "Support Updates", icon: Megaphone, any: ["support_updates.view"] },
       { to: "/reported-issues", label: "Reported Issues", icon: Flag, any: ["reported_issues.view_all", "reported_issues.view_own"] },

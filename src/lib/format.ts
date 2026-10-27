@@ -41,9 +41,18 @@ export function lastCompletedWeekStart(date = new Date()) {
   return addDays(weekStartKey(date), -7);
 }
 
+/**
+ * Recent Monday week-start keys (IST), **newest first** (index 0 = current week).
+ * Prefer `defaultWeeklyPeriodStart()` for filter defaults — not the last entry in this list.
+ */
 export function recentWeeks(count = 8) {
   const current = weekStartKey();
   return Array.from({ length: count }, (_, index) => addDays(current, -7 * (count - 1 - index))).reverse();
+}
+
+/** Default week for period filters — current ISO week (Monday IST). */
+export function defaultWeeklyPeriodStart(date = new Date()) {
+  return currentWeekStart(date);
 }
 
 export function monthKey(date = new Date()) {

@@ -167,16 +167,6 @@ export function RandomAuditPanel({
                 <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{audit.feedback}</p>
               </div>
             ) : null}
-            <p className="mt-3 text-sm text-foreground">
-              <span className="text-muted-foreground">Score correction required: </span>
-              {audit.scoreCorrectionRequired ? "Yes" : "No"}
-            </p>
-            {audit.scoreCorrectionRequired && audit.correctionExplanation ? (
-              <div className="mt-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Correction notes</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm">{audit.correctionExplanation}</p>
-              </div>
-            ) : null}
             <ReviewerResponseBlock audit={audit} />
             {audit.canAcknowledgeRandomAudit || audit.canDisagreeRandomAudit ? (
               <div className="mt-4 flex flex-wrap gap-2 border-t border-border/50 pt-3">
@@ -241,14 +231,10 @@ export function RandomAuditEditDialog({
   const client = useQueryClient();
   const [outcome, setOutcome] = useState<QaRandomAuditOutcome>(audit.outcome);
   const [feedback, setFeedback] = useState(audit.feedback);
-  const [scoreCorrectionRequired, setScoreCorrectionRequired] = useState(audit.scoreCorrectionRequired ? "yes" : "no");
-  const [correctionExplanation, setCorrectionExplanation] = useState(audit.correctionExplanation);
 
   useEffect(() => {
     setOutcome(audit.outcome);
     setFeedback(audit.feedback);
-    setScoreCorrectionRequired(audit.scoreCorrectionRequired ? "yes" : "no");
-    setCorrectionExplanation(audit.correctionExplanation);
   }, [audit]);
 
   const save = useMutation({
@@ -258,8 +244,6 @@ export function RandomAuditEditDialog({
         body: JSON.stringify({
           outcome,
           feedback,
-          scoreCorrectionRequired: scoreCorrectionRequired === "yes",
-          correctionExplanation,
         }),
       }),
     onSuccess: () => {
@@ -274,10 +258,7 @@ export function RandomAuditEditDialog({
   });
 
   const feedbackRequired = outcome === "minor_issue" || outcome === "major_issue";
-  const canSubmit =
-    scoreCorrectionRequired &&
-    (!feedbackRequired || feedback.trim()) &&
-    (scoreCorrectionRequired !== "yes" || correctionExplanation.trim());
+  const canSubmit = !feedbackRequired || feedback.trim();
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -302,22 +283,6 @@ export function RandomAuditEditDialog({
             <Label>Audit feedback{feedbackRequired ? "" : " (optional)"}</Label>
             <Textarea className="mt-1 min-h-[88px]" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
           </div>
-          <div>
-            <Label>Score correction required?</Label>
-            <Select value={scoreCorrectionRequired} onValueChange={(v) => setScoreCorrectionRequired(v as "yes" | "no")}>
-              <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no">No</SelectItem>
-                <SelectItem value="yes">Yes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {scoreCorrectionRequired === "yes" ? (
-            <div>
-              <Label>Correction notes</Label>
-              <Textarea className="mt-1 min-h-[72px]" value={correctionExplanation} onChange={(e) => setCorrectionExplanation(e.target.value)} />
-            </div>
-          ) : null}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -404,8 +369,6 @@ export function RandomAuditFormDialog({
   const client = useQueryClient();
   const [outcome, setOutcome] = useState<QaRandomAuditOutcome | "">("");
   const [feedback, setFeedback] = useState("");
-  const [scoreCorrectionRequired, setScoreCorrectionRequired] = useState<"yes" | "no" | "">("");
-  const [correctionExplanation, setCorrectionExplanation] = useState("");
 
   const save = useMutation({
     mutationFn: () =>
@@ -414,8 +377,6 @@ export function RandomAuditFormDialog({
         body: JSON.stringify({
           outcome,
           feedback,
-          scoreCorrectionRequired: scoreCorrectionRequired === "yes",
-          correctionExplanation,
         }),
       }),
     onSuccess: () => {
@@ -429,11 +390,7 @@ export function RandomAuditFormDialog({
   });
 
   const feedbackRequired = outcome === "minor_issue" || outcome === "major_issue";
-  const canSubmit =
-    outcome &&
-    scoreCorrectionRequired &&
-    (!feedbackRequired || feedback.trim()) &&
-    (scoreCorrectionRequired !== "yes" || correctionExplanation.trim());
+  const canSubmit = Boolean(outcome) && (!feedbackRequired || feedback.trim());
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -441,7 +398,8 @@ export function RandomAuditFormDialog({
         <DialogHeader>
           <DialogTitle>Audit this QA</DialogTitle>
           <DialogDescription>
-            Spot-check the Senior Agent&apos;s evaluation for ticket #{ticketRef}. This does not change the original QA score or criteria.
+            Spot-check the Senior Agent&apos;s evaluation for ticket #{ticketRef}. Random audits are feedback for reviewer
+            quality—they do not change the Agent&apos;s QA score. Score changes go through the QA appeal process.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -465,27 +423,6 @@ export function RandomAuditFormDialog({
               placeholder="What did you find when reviewing this QA evaluation?"
             />
           </div>
-          <div>
-            <Label>Score correction required?</Label>
-            <Select value={scoreCorrectionRequired} onValueChange={(v) => setScoreCorrectionRequired(v as "yes" | "no")}>
-              <SelectTrigger className="mt-1 w-full"><SelectValue placeholder="Yes or No" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no">No</SelectItem>
-                <SelectItem value="yes">Yes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {scoreCorrectionRequired === "yes" ? (
-            <div>
-              <Label>What appears incorrect?</Label>
-              <Textarea
-                className="mt-1 min-h-[72px]"
-                value={correctionExplanation}
-                onChange={(e) => setCorrectionExplanation(e.target.value)}
-                placeholder="Which score or scoring area should be reviewed?"
-              />
-            </div>
-          ) : null}
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

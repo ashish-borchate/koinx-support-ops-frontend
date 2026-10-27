@@ -7,7 +7,14 @@ import { DataTableShell, Empty, ErrorBlock, LoadingBlock, PageHeader } from "@/c
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { formatMonth, formatWeek, monthKey, recentMonths, recentWeeks } from "@/lib/format";
+import {
+  defaultWeeklyPeriodStart,
+  formatMonth,
+  formatWeek,
+  monthKey,
+  recentMonths,
+  recentWeeks,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { QaRandomAuditDetail, QaRandomAuditOutcome } from "@/pages/qa-types";
 import { formatQaRandomAuditDate } from "@/pages/qa-random-audit-ui";
@@ -22,7 +29,7 @@ export function QaRandomAuditsPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const [periodType, setPeriodType] = useState<"weekly" | "monthly">("weekly");
-  const [week, setWeek] = useState(recentWeeks()[recentWeeks().length - 1]);
+  const [week, setWeek] = useState(() => defaultWeeklyPeriodStart());
   const [month, setMonth] = useState(monthKey());
   const [reviewerFilter, setReviewerFilter] = useState("all");
   const [outcomeFilter, setOutcomeFilter] = useState("all");

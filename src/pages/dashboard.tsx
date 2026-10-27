@@ -11,6 +11,7 @@ import { ModuleTasksBoard, type DashboardModuleGroup } from "@/components/module
 import { LatestSupportUpdatesSection, type SupportUpdateItem } from "@/components/support-updates-feed";
 import { QaWorkflowSummaryCards } from "@/components/qa-workflow-summary-cards";
 import { AgentWeekKpiStrip } from "@/components/agent-week-kpi-strip";
+import { DashboardHandbookLink } from "@/components/dashboard-handbook-link";
 import type { Metric } from "@/lib/format";
 
 type AttentionItem = {
@@ -68,6 +69,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardHandbookLink />
       {data.workspace ? (
         <OperationsWorkspace workspace={data.workspace} />
       ) : (

@@ -1,5 +1,5 @@
 import { Navigate, Outlet, Route, Routes, useSearchParams } from "react-router-dom";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Shell } from "@/components/shell";
 import { useAuth } from "@/lib/auth";
 import { PeoplePage } from "@/pages/admin";
@@ -26,6 +26,11 @@ import { CoachingPage } from "@/pages/coaching";
 import { ManagementOverviewPage } from "@/pages/management-overview";
 import { SupportUpdatesPage } from "@/pages/support-updates";
 import { DeletedReportedIssuesPage, ReportedIssuesPage, ReportedIssueDetailPage } from "@/pages/reported-issues";
+import { LoadingBlock } from "@/components/bits";
+
+const HandbookRoutes = lazy(() =>
+  import("@/handbook/pages/HandbookPages").then((m) => ({ default: m.HandbookRoutes })),
+);
 function AuthLayout() {
   const { user, loading } = useAuth();
   if (loading) {
@@ -79,6 +84,14 @@ export default function App() {
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route element={<AuthLayout />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route
+          path="/handbook/*"
+          element={
+            <Suspense fallback={<LoadingBlock />}>
+              <HandbookRoutes />
+            </Suspense>
+          }
+        />
         <Route path="/account" element={<ProfilePage />} />
         <Route path="/account/password" element={<PasswordPage />} />
         <Route path="/view-as" element={<Permit any={["view_as"]}><ViewAsPage /></Permit>} />

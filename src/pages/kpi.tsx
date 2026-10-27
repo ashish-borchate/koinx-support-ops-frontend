@@ -33,6 +33,8 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { KpiBreakdownDialog, type KpiBreakdownRequest } from "@/components/kpi-breakdown-dialog";
+import { KpiDurationField } from "@/components/kpi-duration-field";
+import { hoursToDurationComponents } from "@/lib/kpi-duration";
 
 type KpiGoals = {
   firstResponseHours: number;
@@ -144,6 +146,12 @@ type TeamSummary = {
 
 type AgentDirectoryEntry = { id: string; name: string };
 
+type WeeklyTeamArtRecord = {
+  weekStart: string;
+  averageResponseHours: number;
+  duration: { hours: number; minutes: number; seconds: number; milliseconds: number };
+};
+
 type KpiPayload = {
   periodType?: "weekly" | "monthly";
   month?: string;
@@ -155,6 +163,7 @@ type KpiPayload = {
   goals: KpiGoals;
   scoringConfig: KpiScoringConfig;
   teamSummary: TeamSummary | null;
+  weeklyTeamArt?: WeeklyTeamArtRecord | null;
   qaTeamAverage: number | null;
   qaByAgent: Record<string, number>;
   qaByAgentCounts?: Record<string, number>;
@@ -306,9 +315,14 @@ function buildSummaryMetrics(
     {
       id: "avgResponse",
       label: "Average Response Time",
-      value: formatDurationHours(art),
+      value:
+        teamOverview && art == null
+          ? "Not recorded"
+          : teamOverview && art != null
+            ? formatDurationHours(art)
+            : formatDurationHours(art),
       target: summaryTargetLabel(scoringConfig, "avgResponse"),
-      tone: toneFor("avgResponse", art, "lte"),
+      tone: teamOverview && art == null ? "neutral" : toneFor("avgResponse", art, "lte"),
       weightLine: "",
     },
     {
@@ -438,6 +452,86 @@ function agentStatus(
 
 function totalChats(records: RecordRow[]) {
   return records.reduce((sum, row) => sum + (row.ticketsHandled.value ?? 0), 0);
+}
+
+function WeeklyTeamArtCard({
+  week,
+  weekLabel,
+  record,
+  canEdit,
+}: {
+  week: string;
+  weekLabel: string;
+  record: WeeklyTeamArtRecord | null | undefined;
+  canEdit: boolean;
+}) {
+  const client = useQueryClient();
+  const [hours, setHours] = useState("");
+
+  useEffect(() => {
+    setHours(record ? String(record.averageResponseHours) : "");
+  }, [record, week]);
+
+  const save = useMutation({
+    mutationFn: () => {
+      if (hours.trim() === "" || Number.isNaN(Number(hours))) {
+        throw new Error("Enter team average response time.");
+      }
+      const duration = hoursToDurationComponents(Number(hours));
+      return api("/api/kpi/weekly-team-art", {
+        method: "PUT",
+        body: JSON.stringify({ weekStart: week, duration }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Team ART saved");
+      void client.invalidateQueries({ queryKey: ["kpi"] });
+      void client.invalidateQueries({ queryKey: ["management-overview"] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const notRecorded = !record && hours.trim() === "";
+
+  return (
+    <section className="rounded-xl border border-border/60 bg-card px-4 py-3 shadow-[var(--shadow-card)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-sm font-semibold text-foreground">Weekly team ART</p>
+          <p className="text-xs text-muted-foreground">
+            Reporting week: <span className="font-medium text-foreground">{weekLabel}</span>
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Copy Average Response Time from Freshdesk Analytics → Helpdesk Performance → Response Time. Select the
+            reporting week and relevant support group, and leave the Agent filter unselected.
+          </p>
+        </div>
+        <div className="w-full shrink-0 sm:w-48">
+          <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Team ART (h)</Label>
+          <KpiDurationField
+            label="Team average response time"
+            value={hours}
+            onChange={setHours}
+            disabled={!canEdit}
+          />
+          {notRecorded ? (
+            <p className="mt-1 text-[11px] text-muted-foreground" role="status">Not recorded</p>
+          ) : null}
+          {canEdit ? (
+            <Button
+              type="button"
+              size="sm"
+              className="mt-2 h-8 w-full"
+              disabled={save.isPending || hours.trim() === ""}
+              onClick={() => save.mutate()}
+            >
+              Save team ART
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function KpiPage() {
@@ -740,6 +834,15 @@ export function KpiPage() {
               ) : null}
             </p>
           )}
+
+          {periodType === "weekly" && canViewTeamAggregate ? (
+            <WeeklyTeamArtCard
+              week={week}
+              weekLabel={query.data.label}
+              record={query.data.weeklyTeamArt}
+              canEdit={canMutate("kpi.edit")}
+            />
+          ) : null}
 
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
             {summaryMetrics.map((metric) => (
@@ -1529,22 +1632,22 @@ function KpiDataEntryDialog({
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
                   <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">FRT (h)</Label>
-                  <Input
-                    className="mt-1.5 h-8 text-sm"
-                    inputMode="decimal"
+                  <KpiDurationField
+                    label="First response time"
                     value={frtHours}
-                    onChange={(event) => setFrtHours(event.target.value)}
-                    placeholder="1.7"
+                    onChange={setFrtHours}
+                    nestedInDialog
+                    compact
                   />
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
                   <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ART (h)</Label>
-                  <Input
-                    className="mt-1.5 h-8 text-sm"
-                    inputMode="decimal"
+                  <KpiDurationField
+                    label="Average response time"
                     value={artHours}
-                    onChange={(event) => setArtHours(event.target.value)}
-                    placeholder="2.4"
+                    onChange={setArtHours}
+                    nestedInDialog
+                    compact
                   />
                 </div>
                 <div className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
@@ -1554,7 +1657,7 @@ function KpiDataEntryDialog({
                     inputMode="decimal"
                     value={resolutionHours}
                     onChange={(event) => setResolutionHours(event.target.value)}
-                    placeholder="12.5"
+                    placeholder="9.39"
                   />
                 </div>
                 <div className="col-span-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 sm:col-span-1 lg:col-span-1">
@@ -1646,11 +1749,8 @@ function KpiDataEntryDialog({
 }
 
 type KpiReportingConfig = {
-  assigneeUserId: string | null;
   launchDateIst: string | null;
 };
-
-type DirectoryUser = { id: string; name: string; active: boolean; roleKey: string };
 
 /** Strip % and commas; reject empty/invalid so JSON never sends null from NaN. */
 function parseKpiSettingsNumber(raw: string, label: string): number {
@@ -1751,11 +1851,6 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
     queryKey: ["kpi-reporting"],
     queryFn: () => api<{ reporting: KpiReportingConfig }>("/api/kpi/reporting"),
   });
-  const usersQuery = useQuery({
-    queryKey: ["users-directory"],
-    queryFn: () => api<{ users: DirectoryUser[] }>("/api/users"),
-  });
-  const [reportingAssigneeId, setReportingAssigneeId] = useState<string>("");
   const [reportingLaunchDate, setReportingLaunchDate] = useState("");
   const [frt, setFrt] = useState("");
   const [art, setArt] = useState("");
@@ -1770,7 +1865,7 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
   const [wCsat, setWCsat] = useState("25");
   const [wQa, setWQa] = useState("25");
   const [settingsTab, setSettingsTab] = useState("reporting");
-  const [reportingBaseline, setReportingBaseline] = useState({ assignee: "", launch: "" });
+  const [reportingBaseline, setReportingBaseline] = useState({ launch: "" });
   const [scoringBaseline, setScoringBaseline] = useState("");
   const [changeReason, setChangeReason] = useState("");
   const [compareVersionId, setCompareVersionId] = useState<string | null>(null);
@@ -1783,7 +1878,7 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
   }, [wArt, wCsat, wFrt, wQa, wRes, wSla]);
 
   const reportingDirty =
-    reportingAssigneeId !== reportingBaseline.assignee || reportingLaunchDate !== reportingBaseline.launch;
+    reportingLaunchDate !== reportingBaseline.launch;
   const scoringSnapshot = JSON.stringify({ frt, art, resolution, csat, sla, qa, wFrt, wArt, wRes, wSla, wCsat, wQa });
   const scoringDirty = scoringBaseline !== "" && scoringSnapshot !== scoringBaseline;
 
@@ -1822,11 +1917,9 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const reporting = reportingQuery.data?.reporting;
     if (!reporting) return;
-    const assignee = reporting.assigneeUserId ?? "";
     const launch = reporting.launchDateIst ?? "";
-    setReportingAssigneeId(assignee);
     setReportingLaunchDate(launch);
-    setReportingBaseline({ assignee, launch });
+    setReportingBaseline({ launch });
   }, [reportingQuery.data]);
 
   const saveReporting = useMutation({
@@ -1834,13 +1927,12 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
       api<{ reporting: KpiReportingConfig }>("/api/kpi/reporting", {
         method: "PUT",
         body: JSON.stringify({
-          assigneeUserId: reportingAssigneeId || null,
           launchDateIst: reportingLaunchDate.trim() || null,
         }),
       }),
     onSuccess: () => {
-      toast.success("KPI reporting ownership updated");
-      setReportingBaseline({ assignee: reportingAssigneeId, launch: reportingLaunchDate });
+      toast.success("Daily DSAT launch date updated");
+      setReportingBaseline({ launch: reportingLaunchDate });
       void client.invalidateQueries({ queryKey: ["kpi-reporting"] });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
     },
@@ -2109,7 +2201,7 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
       <DialogContent className="flex max-h-[min(90svh,44rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(94vw,56rem)]">
         <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4 text-left">
           <DialogTitle>KPI settings</DialogTitle>
-          <p className="text-xs text-muted-foreground">Reporting ownership, scoring targets, and metric weights.</p>
+          <p className="text-xs text-muted-foreground">Daily DSAT schedule, scoring targets, and metric weights.</p>
         </DialogHeader>
         {goalsQuery.isLoading || reportingQuery.isLoading ? (
           <div className="px-5 py-6"><LoadingBlock /></div>
@@ -2127,28 +2219,12 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
               <TabsContent value="reporting" className="mt-0 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Assigns weekly/monthly KPI reporting and daily DSAT checks to one active user. Derived tasks stay off until a launch date is set.
+                  Daily DSAT Deep Dive is handled by Senior Agents (Monday–Saturday IST). Set the launch date to start derived
+                  dashboard tasks. Supervisors own weekly and monthly KPI reporting completion on the dashboard.
                 </p>
                 <div className="grid gap-3 sm:max-w-md">
                   <div className="space-y-1.5">
-                    <Label>Reporting owner</Label>
-                    <Select
-                      value={reportingAssigneeId || "__none__"}
-                      onValueChange={(value) => setReportingAssigneeId(value === "__none__" ? "" : value)}
-                    >
-                      <SelectTrigger><SelectValue placeholder="Select active user" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Not configured</SelectItem>
-                        {(usersQuery.data?.users ?? [])
-                          .filter((u) => u.active)
-                          .map((u) => (
-                            <SelectItem key={u.id} value={u.id}>{u.name} ({u.roleKey})</SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Launch date (IST)</Label>
+                    <Label>DSAT launch date (IST)</Label>
                     <Input type="date" value={reportingLaunchDate} onChange={(e) => setReportingLaunchDate(e.target.value)} />
                   </div>
                 </div>

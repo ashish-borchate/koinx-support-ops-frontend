@@ -33,6 +33,7 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { KpiBreakdownDialog, type KpiBreakdownRequest } from "@/components/kpi-breakdown-dialog";
+import { KpiFreshdeskImportDialog } from "@/components/kpi-freshdesk-import-dialog";
 import { KpiDurationField } from "@/components/kpi-duration-field";
 import { hoursToDurationComponents } from "@/lib/kpi-duration";
 
@@ -571,6 +572,7 @@ export function KpiPage() {
     agentId: string;
   } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [breakdownRequest, setBreakdownRequest] = useState<KpiBreakdownRequest | null>(null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
@@ -755,6 +757,9 @@ export function KpiPage() {
     <div className="flex flex-wrap items-center gap-2">
       {canMutate("kpi.edit") ? (
         <>
+          <Button size="sm" variant="outline" className="h-9" onClick={() => setImportOpen(true)}>
+            Import Freshdesk PDF
+          </Button>
           <Button size="sm" className="h-9 gap-1.5" onClick={() => openAddKpi()}>
             <Plus className="size-4" />
             Add KPI Data
@@ -994,6 +999,7 @@ export function KpiPage() {
           if (!next) setBreakdownRequest(null);
         }}
       />
+      <KpiFreshdeskImportDialog open={importOpen} onOpenChange={setImportOpen} agents={agents} />
     </div>
   );
 }

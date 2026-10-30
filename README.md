@@ -2,6 +2,8 @@
 
 React app for the KoinX support operations hub. The API is a separate repository. This app only talks to it over HTTP.
 
+**Git:** `origin` → https://github.com/ashish-borchate/koinx-support-ops-frontend (`main`). This is the deployment source of truth for the frontend.
+
 You need **Node.js 22+** and a running API.
 
 ## Run

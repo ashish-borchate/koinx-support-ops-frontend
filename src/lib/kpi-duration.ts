@@ -85,6 +85,12 @@ export function formatFreshdeskDurationLabel(parts: DurationComponents): string 
   return segments.join(" ");
 }
 
+/** Human-readable duration for KPI import preview (stored values remain decimal hours). */
+export function formatKpiImportDurationHours(hours: number | null | undefined): string {
+  if (hours == null || Number.isNaN(hours)) return "—";
+  return formatFreshdeskDurationLabel(hoursToDurationComponents(hours));
+}
+
 /** Display hours with up to 4 decimal places; trim trailing zeros. */
 export function formatStoredHoursDisplay(hours: number | null | undefined): string {
   if (hours == null || Number.isNaN(hours)) return "";

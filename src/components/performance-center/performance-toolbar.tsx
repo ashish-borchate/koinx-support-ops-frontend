@@ -46,11 +46,12 @@ export function PerformanceToolbar({
 }: Props) {
   const presetLabel = PERIOD_PRESETS.find((p) => p.value === preset)?.label ?? preset;
   const rangeBadge =
-    periodStartIst && periodEndIst
+    periodLabel ??
+    (periodStartIst && periodEndIst
       ? `${formatCalendarDate(periodStartIst)} – ${formatCalendarDate(periodEndIst)}`
       : preset === "custom" && customFrom && customTo
         ? `${customFrom} – ${customTo}`
-        : presetLabel;
+        : presetLabel);
 
   return (
     <div

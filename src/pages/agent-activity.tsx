@@ -112,13 +112,13 @@ export function AgentActivityPage() {
   const dashQ = useQuery({
     queryKey: ["agent-activity-dashboard", queryString],
     queryFn: () => api<DashboardPayload>(`/api/agent-activity/dashboard?${queryString}`),
-    enabled: Boolean(effectiveAgentId) && (preset !== "custom" || (customFrom && customTo)),
+    enabled: Boolean(effectiveAgentId) && (preset !== "custom" || Boolean(customFrom && customTo)),
   });
 
   const d = dashQ.data;
 
   if (!can("agent_activity.view_own") && !canTeam) {
-    return <Empty title="No access" detail="You do not have permission to view Agent Performance." />;
+    return <Empty title="No access" body="You do not have permission to view Agent Performance." />;
   }
 
   return (
@@ -188,7 +188,14 @@ export function AgentActivityPage() {
       />
 
       {dashQ.isLoading ? <LoadingBlock /> : null}
-      {dashQ.isError ? <ErrorBlock message={(dashQ.error as Error).message} onRetry={() => dashQ.refetch()} /> : null}
+      {dashQ.isError ? (
+        <div className="space-y-2">
+          <ErrorBlock message={(dashQ.error as Error).message} />
+          <Button type="button" variant="outline" size="sm" onClick={() => void dashQ.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       {d ? (
         <>

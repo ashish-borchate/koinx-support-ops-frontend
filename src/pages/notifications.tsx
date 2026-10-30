@@ -64,11 +64,11 @@ export function NotificationsPage() {
   }
 
   if (!can("notification_center.view_own") && !can("notification_center.view_team")) {
-    return <ErrorBlock title="Forbidden" detail="You do not have access to the Notification Center." />;
+    return <ErrorBlock message="You do not have access to the Notification Center." />;
   }
 
   if (listQ.isLoading) return <LoadingBlock label="Loading notifications…" />;
-  if (listQ.isError) return <ErrorBlock title="Could not load notifications" detail={String(listQ.error)} />;
+  if (listQ.isError) return <ErrorBlock message={String(listQ.error)} />;
 
   const items = listQ.data?.items ?? [];
   const total = listQ.data?.total ?? 0;
@@ -78,7 +78,7 @@ export function NotificationsPage() {
       <PageHeader
         title="Notification Center"
         description="Persistent in-app alerts for your responsibilities. Marking read does not resolve the underlying work item."
-        actions={
+        secondaryAction={
           <div className="flex flex-wrap gap-2">
             {can("notification_center.view_team") ? (
               <Button variant="outline" asChild>
@@ -128,7 +128,7 @@ export function NotificationsPage() {
       </div>
 
       {items.length === 0 ? (
-        <Empty title="No notifications" detail="Nothing matches these filters." />
+        <Empty title="No notifications" body="Nothing matches these filters." />
       ) : (
         <ul className="divide-y rounded-xl border bg-card shadow-[var(--shadow-card)]">
           {items.map((row) => (

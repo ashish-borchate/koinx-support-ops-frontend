@@ -58,8 +58,13 @@ export function Empty({
   return <EmptyState title={title} body={body} bodyClassName={bodyClassName} />;
 }
 
-export function LoadingBlock() {
-  return <div className="h-40 animate-pulse rounded-xl bg-muted/80" />;
+export function LoadingBlock({ label }: { label?: string }) {
+  return (
+    <div className="space-y-2">
+      <div className="h-40 animate-pulse rounded-xl bg-muted/80" aria-hidden />
+      {label ? <p className="text-center text-sm text-muted-foreground">{label}</p> : null}
+    </div>
+  );
 }
 
 export function ErrorBlock({ message }: { message: string }) {

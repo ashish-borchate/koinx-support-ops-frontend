@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ export function WeeklyAgentReviewsPage() {
   } | null;
 
   if (!can("weekly_reviews.view_own") && !canManage && !can("weekly_reviews.view_team")) {
-    return <ErrorBlock title="Forbidden" detail="You do not have access to weekly reviews." />;
+    return <ErrorBlock message="You do not have access to weekly reviews." />;
   }
 
   return (
@@ -132,7 +132,7 @@ export function WeeklyAgentReviewsPage() {
       <PageHeader
         title="Weekly Agent Reviews"
         description="Permanent finalized records with frozen metric snapshots. Drafts refresh from live Hub data until finalized."
-        actions={
+        action={
           <Button variant="outline" asChild>
             <Link to="/team-performance">Team Performance</Link>
           </Button>
@@ -183,7 +183,9 @@ export function WeeklyAgentReviewsPage() {
           ))}
         </div>
       ) : (
-        !listQ.isLoading && <Empty title="No reviews" detail="Generate a draft for an agent and week, or wait for scheduled preparation." />
+        !listQ.isLoading && (
+          <Empty title="No reviews" body="Generate a draft for an agent and week, or wait for scheduled preparation." />
+        )
       )}
 
       {review ? (

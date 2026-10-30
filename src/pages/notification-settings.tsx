@@ -111,10 +111,10 @@ export function NotificationSettingsPage() {
   });
 
   if (!can("notification_center.manage")) {
-    return <ErrorBlock title="Forbidden" detail="Only Admins can manage notification settings." />;
+    return <ErrorBlock message="Only Admins can manage notification settings." />;
   }
   if (configQ.isLoading || !draft) return <LoadingBlock label="Loading notification settings…" />;
-  if (configQ.isError) return <ErrorBlock title="Could not load settings" detail={String(configQ.error)} />;
+  if (configQ.isError) return <ErrorBlock message={String(configQ.error)} />;
 
   const c = draft.categories;
 

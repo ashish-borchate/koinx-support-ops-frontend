@@ -76,7 +76,7 @@ export function TeamPerformancePage() {
   }, [dashQ.data, sortKey]);
 
   if (dashQ.isLoading) return <LoadingBlock label="Loading team performance…" />;
-  if (dashQ.isError) return <ErrorBlock title="Could not load dashboard" detail={String(dashQ.error)} />;
+  if (dashQ.isError) return <ErrorBlock message={String(dashQ.error)} />;
   const d = dashQ.data!;
 
   return (
@@ -84,7 +84,7 @@ export function TeamPerformancePage() {
       <PageHeader
         title="Team Performance"
         description="Management insights from live Hub modules. Period activity is separate from current outstanding work."
-        actions={
+        secondaryAction={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
               <Link to="/team-attention">Team Attention</Link>
@@ -150,7 +150,7 @@ export function TeamPerformancePage() {
       </div>
 
       {rows.length === 0 ? (
-        <Empty title="No agents" detail="No canonical agents found for comparison." />
+        <Empty title="No agents" body="No canonical agents found for comparison." />
       ) : (
         <div className="overflow-x-auto rounded-xl border bg-card shadow-[var(--shadow-card)]">
           <table className="w-full min-w-[960px] text-sm">
@@ -219,9 +219,9 @@ export function TeamPerformancePage() {
       <DateRangeDialog
         open={rangeOpen}
         onOpenChange={setRangeOpen}
-        from={customFrom}
-        to={customTo}
-        onApply={(from, to) => {
+        initialFrom={customFrom}
+        initialTo={customTo}
+        onConfirm={(from: string, to: string) => {
           setCustomFrom(from);
           setCustomTo(to);
         }}

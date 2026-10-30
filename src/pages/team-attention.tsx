@@ -59,11 +59,11 @@ export function TeamAttentionPage() {
   }, [attentionQ.data, agentId, category, priority]);
 
   if (!can("notification_center.view_team")) {
-    return <ErrorBlock title="Forbidden" detail="Team Attention is available to Senior Agents, Supervisors, and Admins." />;
+    return <ErrorBlock message="Team Attention is available to Senior Agents, Supervisors, and Admins." />;
   }
 
   if (attentionQ.isLoading) return <LoadingBlock label="Loading team concerns…" />;
-  if (attentionQ.isError) return <ErrorBlock title="Could not load Team Attention" detail={String(attentionQ.error)} />;
+  if (attentionQ.isError) return <ErrorBlock message={String(attentionQ.error)} />;
 
   const summary = attentionQ.data?.summary;
 
@@ -72,7 +72,7 @@ export function TeamAttentionPage() {
       <PageHeader
         title="Team Attention"
         description="Live operational concerns across agents. Rows disappear when the underlying record is resolved — no manual dismiss required."
-        actions={
+        action={
           <Button variant="outline" asChild>
             <Link to="/notifications">Your notifications</Link>
           </Button>
@@ -130,7 +130,7 @@ export function TeamAttentionPage() {
       </div>
 
       {items.length === 0 ? (
-        <Empty title="No open concerns" detail="No operational items match these filters." />
+        <Empty title="No open concerns" body="No operational items match these filters." />
       ) : (
         <div className="overflow-x-auto rounded-xl border bg-card shadow-[var(--shadow-card)]">
           <table className="w-full min-w-[880px] text-sm">

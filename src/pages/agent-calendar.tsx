@@ -99,6 +99,7 @@ type PendingLeave = {
   proposedEndDateIst?: string;
   proposedReason?: string;
   cancellationReason?: string;
+  originalReason?: string;
 };
 
 function agentDayClasses(

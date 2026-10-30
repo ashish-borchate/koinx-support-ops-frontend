@@ -170,6 +170,23 @@ export function QaListPage() {
   const [drawerId, setDrawerId] = useState<string | null>(null);
 
   useEffect(() => {
+    const pt = searchParams.get("periodType");
+    const weekParam = searchParams.get("week");
+    const monthParam = searchParams.get("month");
+    const agentParam = searchParams.get("agentId");
+    if (pt === "monthly" && monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      setPeriodType("monthly");
+      setMonth(monthParam);
+    } else if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+      setPeriodType("weekly");
+      setWeek(weekParam);
+    }
+    if (agentParam && showSubjectFilter) {
+      setAgentFilter(agentParam);
+    }
+  }, [searchParams, showSubjectFilter]);
+
+  useEffect(() => {
     const handle = window.setTimeout(() => setSearchQ(search.trim()), 250);
     return () => window.clearTimeout(handle);
   }, [search]);

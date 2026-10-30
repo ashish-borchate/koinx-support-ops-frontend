@@ -17,6 +17,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  Bell,
   MessageSquarePlus,
   Plug,
   Sparkles,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { HubNotificationToasts } from "@/components/hub-notification-toasts";
+import { NotificationBell } from "@/components/notification-bell";
 import { ThemeSwitcher } from "@/components/design/theme-switcher";
 import { useAuth } from "@/lib/auth";
 import { moduleHomePath } from "@/lib/module-nav";
@@ -74,6 +76,20 @@ const groups: NavGroup[] = [
     label: "Quality & performance",
     links: [
       { to: "/kpi", label: "KPI Performance", icon: Gauge, any: ["kpi.view_team", "kpi.view_own"] },
+      {
+        to: "/performance-center",
+        label: "Performance Center",
+        icon: LineChart,
+        any: [
+          "agent_activity.view_own",
+          "agent_activity.view_team",
+          "team_performance.view_team",
+          "weekly_reviews.view_own",
+          "weekly_reviews.view_team",
+          "weekly_reviews.manage",
+        ],
+      },
+      { to: "/agent-calendar", label: "Agent Calendar", icon: UserRound, any: ["agent_calendar.view_own", "agent_calendar.view_team"] },
       { to: "/qa", label: "Quality Assurance", icon: ClipboardCheck, any: ["qa.view_team", "qa.view_own", "qa.create"] },
       { to: "/negative-reviews/dashboard", label: "Negative Reviews", icon: LayoutDashboard, any: ["negative_reviews.dashboard", "negative_reviews.tracker"] },
       { to: "/coaching", label: "Coaching Center", icon: GraduationCap, any: ["coaching.view_team", "coaching.view_own"] },
@@ -233,6 +249,12 @@ function AccountMenu() {
             User management
           </DropdownMenuItem>
         ) : null}
+        {can("notification_center.manage") ? (
+          <DropdownMenuItem onClick={() => navigate("/admin/notification-settings")}>
+            <Bell />
+            Notification settings
+          </DropdownMenuItem>
+        ) : null}
         {can("view_as") ? (
           <DropdownMenuItem onClick={() => navigate("/view-as")}>
             <Eye />
@@ -298,6 +320,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-muted-foreground">Support Operations</p>
           </div>
+          <NotificationBell />
           <AccountMenu />
         </header>
         <HubNotificationToasts />

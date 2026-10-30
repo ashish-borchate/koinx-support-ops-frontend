@@ -13,6 +13,7 @@ import {
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { IstDatePicker } from "@/components/ui/ist-date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { KpiBreakdownDialog, type KpiBreakdownRequest } from "@/components/kpi-breakdown-dialog";
 import { KpiFreshdeskImportDialog } from "@/components/kpi-freshdesk-import-dialog";
 import { KpiDurationField } from "@/components/kpi-duration-field";
+import { MetricBreakdownCardGrid, type MetricBreakdownCardItem } from "@/components/kpi/scorecard-breakdown-panel";
 import { hoursToDurationComponents } from "@/lib/kpi-duration";
 
 type KpiGoals = {
@@ -468,10 +470,18 @@ function WeeklyTeamArtCard({
 }) {
   const client = useQueryClient();
   const [hours, setHours] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  const persisted = record != null;
+  const savedHours = record ? String(record.averageResponseHours) : "";
 
   useEffect(() => {
-    setHours(record ? String(record.averageResponseHours) : "");
-  }, [record, week]);
+    if (editing) {
+      setHours(savedHours);
+    } else {
+      setHours(savedHours);
+    }
+  }, [record, week, editing, savedHours]);
 
   const save = useMutation({
     mutationFn: () => {
@@ -485,20 +495,29 @@ function WeeklyTeamArtCard({
       });
     },
     onSuccess: () => {
-      toast.success("Team ART saved");
+      toast.success(persisted ? "Team ART updated" : "Team ART saved");
+      setEditing(false);
       void client.invalidateQueries({ queryKey: ["kpi"] });
       void client.invalidateQueries({ queryKey: ["management-overview"] });
     },
     onError: (error) => toast.error(error.message),
   });
 
-  const notRecorded = !record && hours.trim() === "";
+  const readOnlyDisplay = !canEdit || (persisted && !editing);
+  const dirty = hours.trim() !== savedHours.trim();
 
   return (
     <section className="rounded-xl border border-border/60 bg-card px-4 py-3 shadow-[var(--shadow-card)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-sm font-semibold text-foreground">Weekly team ART</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-foreground">Weekly team ART</p>
+            {persisted && !editing ? (
+              <span className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 dark:text-emerald-100">
+                Saved
+              </span>
+            ) : null}
+          </div>
           <p className="text-xs text-muted-foreground">
             Reporting week: <span className="font-medium text-foreground">{weekLabel}</span>
           </p>
@@ -513,21 +532,47 @@ function WeeklyTeamArtCard({
             label="Team average response time"
             value={hours}
             onChange={setHours}
-            disabled={!canEdit}
+            disabled={readOnlyDisplay}
           />
-          {notRecorded ? (
-            <p className="mt-1 text-[11px] text-muted-foreground" role="status">Not recorded</p>
+          {!persisted && hours.trim() === "" ? (
+            <p className="mt-1 text-[11px] text-muted-foreground" role="status">
+              Not recorded
+            </p>
           ) : null}
           {canEdit ? (
-            <Button
-              type="button"
-              size="sm"
-              className="mt-2 h-8 w-full"
-              disabled={save.isPending || hours.trim() === ""}
-              onClick={() => save.mutate()}
-            >
-              Save team ART
-            </Button>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {persisted && !editing ? (
+                <Button type="button" size="sm" className="h-8" variant="outline" onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+              ) : (
+                <>
+                  {persisted && editing ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(false);
+                        setHours(savedHours);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8"
+                    disabled={save.isPending || hours.trim() === "" || (persisted && !dirty)}
+                    onClick={() => save.mutate()}
+                  >
+                    {persisted ? "Save changes" : "Save team ART"}
+                  </Button>
+                </>
+              )}
+            </div>
           ) : null}
         </div>
       </div>
@@ -545,22 +590,24 @@ export function KpiPage() {
   const [periodType, setPeriodType] = useState<"weekly" | "monthly">("weekly");
   const [week, setWeek] = useState(() => currentWeekStart());
   const [month, setMonth] = useState(monthKey());
+  const [agentFilter, setAgentFilter] = useState("all");
 
   useEffect(() => {
     const pt = searchParams.get("periodType");
     const weekParam = searchParams.get("week");
     const monthParam = searchParams.get("month");
+    const agentParam = searchParams.get("agentId");
     if (pt === "monthly" && monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
       setPeriodType("monthly");
       setMonth(monthParam);
-      return;
-    }
-    if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+    } else if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
       setPeriodType("weekly");
       setWeek(weekParam);
     }
-  }, [searchParams]);
-  const [agentFilter, setAgentFilter] = useState("all");
+    if (agentParam && showAgentFilter) {
+      setAgentFilter(agentParam);
+    }
+  }, [searchParams, showAgentFilter]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -757,14 +804,14 @@ export function KpiPage() {
     <div className="flex flex-wrap items-center gap-2">
       {canMutate("kpi.edit") ? (
         <>
-          <Button size="sm" variant="outline" className="h-9" onClick={() => setImportOpen(true)}>
+          <Button size="sm" className="h-9" onClick={() => setImportOpen(true)}>
             Import Freshdesk PDF
           </Button>
           <Button size="sm" className="h-9 gap-1.5" onClick={() => openAddKpi()}>
             <Plus className="size-4" />
             Add KPI Data
           </Button>
-          <Button size="sm" variant="outline" className="h-9" onClick={() => openEditKpi()}>
+          <Button size="sm" className="h-9" onClick={() => openEditKpi()}>
             Edit KPI Data
           </Button>
         </>
@@ -1034,7 +1081,15 @@ function AgentPerformanceSection({
         action={workloadLabel ? <span className="text-xs text-muted-foreground">{workloadLabel}</span> : null}
       />
       <DataTableShell className="hidden md:block overflow-x-auto">
-        <table className="w-full min-w-[44rem] text-sm">
+        <table className="w-full min-w-[44rem] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[14%]" />
+            <col className="w-[12%]" />
+            <col className="w-[12%]" />
+            <col className="w-[28%]" />
+            <col className="w-[10%]" />
+          </colgroup>
           <thead className="border-b border-border/60 bg-muted/20 text-left text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-2.5 font-medium">Agent</th>
@@ -1062,7 +1117,7 @@ function AgentPerformanceSection({
                     className="border-t border-border/50 hover:bg-muted/25 cursor-pointer"
                     onClick={() => onToggle(row.id)}
                   >
-                    <td className="px-3 py-2 font-medium text-foreground">{row.agentName}</td>
+                    <td className="whitespace-nowrap px-3 py-2 font-medium text-foreground">{row.agentName}</td>
                     <td className="px-3 py-2 text-right">
                       {row.scorecard?.compositeScore != null ? (
                         <button
@@ -1251,64 +1306,28 @@ function AgentBreakdown({
         ? "Historical CSAT stored as percentage only"
         : null;
 
+  const cards: MetricBreakdownCardItem[] = metrics.map((item) => {
+    const scored = scoreById.get(item.id);
+    return {
+      id: item.id,
+      label: item.label,
+      value: item.value,
+      targetLabel: item.target,
+      weight: scored?.weight ?? (scoringConfig.scoringConfigured ? summaryMetricWeight(scoringConfig, SCORECARD_TO_SUMMARY[item.id] ?? "frt") : undefined),
+      pointsDisplay: scored?.points != null ? scored.pointsDisplay : null,
+      tone: scored?.points != null ? earnedPointsTone(scored.points, scored.weight) : "neutral",
+    };
+  });
+
   return (
     <div className={className}>
       <p className="text-xs font-semibold text-foreground">Metric breakdown</p>
       {surveyLine ? <p className="mt-1 text-[11px] text-muted-foreground">{surveyLine}</p> : null}
-      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {metrics.map((item) => {
-          const scored = scoreById.get(item.id);
-          const tone = scored?.points != null ? earnedPointsTone(scored.points, scored.weight) : "neutral";
-          return (
-            <div
-              key={item.id}
-              className={cn("rounded-md border px-2.5 py-2", toneBorder[tone])}
-            >
-              <p className="text-[10px] font-semibold leading-snug text-muted-foreground">{item.label}</p>
-              <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">{item.value}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Target {item.target}</p>
-              {scored ? (
-                <p className="mt-1 border-t border-border/40 pt-1 text-[10px] tabular-nums text-muted-foreground">
-                  Weight {scored.weight}
-                  {scored.points != null ? ` · Earned ${scored.pointsDisplay}` : ""}
-                </p>
-              ) : scoringConfig.scoringConfigured ? (
-                <p className="mt-1 border-t border-border/40 pt-1 text-[10px] tabular-nums text-muted-foreground">
-                  Weight {summaryMetricWeight(scoringConfig, SCORECARD_TO_SUMMARY[item.id] ?? "frt")}
-                </p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      {row.scorecard ? (
-        <div className="mt-3 border-t border-border/40 pt-2">
-          <div className="overflow-x-auto rounded-lg border border-border/50">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/30 text-muted-foreground">
-                <tr>
-                  <th className="px-2.5 py-2 text-left font-semibold">Metric</th>
-                  <th className="px-2.5 py-2 text-right font-semibold">Actual</th>
-                  <th className="px-2.5 py-2 text-right font-semibold">Target</th>
-                  <th className="px-2.5 py-2 text-right font-semibold">Earned</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/40">
-                {row.scorecard.metrics.map((metric) => (
-                  <tr key={metric.id} className="hover:bg-muted/20">
-                    <td className="px-2.5 py-2 font-medium text-foreground">{metric.label}</td>
-                    <td className="px-2.5 py-2 text-right tabular-nums">{metric.actualLabel}</td>
-                    <td className="px-2.5 py-2 text-right tabular-nums text-muted-foreground">
-                      {metric.target == null ? "Not configured" : formatNumber(metric.target, metric.id === "sla" || metric.id === "csat" || metric.id === "qa" ? 0 : 1)}
-                      {metric.id === "sla" || metric.id === "csat" || metric.id === "qa" ? (metric.target != null ? "%" : "") : metric.target != null ? "h" : ""}
-                    </td>
-                    <td className="px-2.5 py-2 text-right tabular-nums font-medium">{metric.pointsDisplay}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <MetricBreakdownCardGrid items={cards} className="mt-2" />
+      {row.scorecard?.compositeDisplay ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Overall KPI: <span className="font-medium text-foreground">{row.scorecard.compositeDisplay}</span>
+        </p>
       ) : null}
     </div>
   );
@@ -2231,7 +2250,7 @@ function KpiSettingsDialog({ onClose }: { onClose: () => void }) {
                 <div className="grid gap-3 sm:max-w-md">
                   <div className="space-y-1.5">
                     <Label>DSAT launch date (IST)</Label>
-                    <Input type="date" value={reportingLaunchDate} onChange={(e) => setReportingLaunchDate(e.target.value)} />
+                    <IstDatePicker value={reportingLaunchDate} onChange={setReportingLaunchDate} aria-label="Reporting launch date" />
                   </div>
                 </div>
               </TabsContent>

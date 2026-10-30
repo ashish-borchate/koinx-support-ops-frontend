@@ -31,6 +31,30 @@ export function formatWeek(weekStart: string) {
   return `${fmt(weekStart)} – ${fmt(end)}`;
 }
 
+/** ISO week number for a Monday week-start key (UTC calendar math on stored date). */
+export function isoWeekNumber(weekStart: string): number {
+  const [y, m, d] = weekStart.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+/** Management compare / reporting label for a KPI week. */
+export function formatReportingWeekLabel(weekStart: string) {
+  return `Week ${isoWeekNumber(weekStart)} : ${formatWeek(weekStart)}`;
+}
+
+/** Management compare label for a KPI month. */
+export function formatReportingMonthLabel(month: string) {
+  return `Month : ${formatMonth(month)}`;
+}
+
+export function formatComparePeriodLabel(periodType: "weekly" | "monthly", key: string) {
+  return periodType === "weekly" ? formatReportingWeekLabel(key) : formatReportingMonthLabel(key);
+}
+
 /** Monday (IST) of the week containing `date` — use for default period filters. */
 export function currentWeekStart(date = new Date()) {
   return weekStartKey(date);
@@ -79,6 +103,30 @@ export function recentMonths(count = 12) {
     const m = String(d.getUTCMonth() + 1).padStart(2, "0");
     return `${y}-${m}`;
   });
+}
+
+/** Calendar month immediately before `YYYY-MM`. */
+export function previousMonthKey(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  if (m === 1) return `${y - 1}-12`;
+  return `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
+/** Prior reporting period key (weekly −7d, monthly −1 month). */
+export function previousPeriodKey(periodType: "weekly" | "monthly", key: string): string {
+  if (periodType === "weekly") return addDays(key, -7);
+  return previousMonthKey(key);
+}
+
+/** Monday week-start keys for compare pickers (newest first). */
+export function historicalWeekStarts(count = 52) {
+  const current = weekStartKey();
+  return Array.from({ length: count }, (_, index) => addDays(current, -7 * index));
+}
+
+/** Month keys for compare pickers (newest first). */
+export function historicalMonthKeys(count = 36) {
+  return recentMonths(count).reverse();
 }
 
 /** Display a stored `YYYY-MM-DD` calendar date (UTC semantics). */
@@ -136,6 +184,15 @@ export function formatDurationHours(value: number | null | undefined) {
 
 export function formatDurationHoursGoal(value: number) {
   return `≤ ${formatDurationHours(value)}`;
+}
+
+/** Today's calendar date in IST as `YYYY-MM-DD`. */
+export function istDateKey(date = new Date()) {
+  const ist = new Date(date.getTime() + IST);
+  const y = ist.getUTCFullYear();
+  const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(ist.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 export type Metric = {

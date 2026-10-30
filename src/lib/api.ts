@@ -133,7 +133,19 @@ export async function download(path: string, filename: string) {
   const viewAs = getViewAs();
   if (viewAs) headers.set("X-View-As", viewAs);
   const response = await fetch(apiUrl(path), { headers });
-  if (!response.ok) throw new ApiError(response.status, "Export failed");
+  if (!response.ok) {
+    const text = await response.text();
+    let message = "Download failed";
+    if (text) {
+      try {
+        const data = JSON.parse(text) as { error?: string };
+        if (data.error) message = data.error;
+      } catch {
+        /* ignore */
+      }
+    }
+    throw new ApiError(response.status, message);
+  }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

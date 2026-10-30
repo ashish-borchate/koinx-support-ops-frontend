@@ -7,10 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  KpiFreshdeskImportHistoryList,
+  KpiFreshdeskImportHistoryViewDialog,
+} from "@/components/kpi-freshdesk-import-history";
+import {
   KpiFreshdeskImportPreviewTable,
   type ImportPreviewRow,
 } from "@/components/kpi-freshdesk-import-preview-table";
+import { KpiFreshdeskImportReplacementCompare } from "@/components/kpi-freshdesk-import-replacement-compare";
 import { api } from "@/lib/api";
+import type { ImportHistoryEntry } from "@/lib/freshdesk-import-history";
 
 type HubAgent = { id: string; name: string };
 
@@ -73,6 +79,7 @@ export function KpiFreshdeskImportDialog({
   const [mappingDraft, setMappingDraft] = useState<Record<string, string>>({});
   const [selectionDraft, setSelectionDraft] = useState<Set<string>>(new Set());
   const [confirmReplace, setConfirmReplace] = useState(false);
+  const [historyViewId, setHistoryViewId] = useState<string | null>(null);
 
   function syncPreviewState(data: ParseResponse) {
     const initial: Record<string, string> = {};
@@ -87,8 +94,8 @@ export function KpiFreshdeskImportDialog({
   }
 
   const historyQuery = useQuery({
-    queryKey: ["kpi-imports"],
-    queryFn: () => api<{ imports: ImportSummary[] }>("/api/kpi/import"),
+    queryKey: ["kpi-imports", "history"],
+    queryFn: () => api<{ imports: ImportHistoryEntry[] }>("/api/kpi/import"),
     enabled: open,
   });
 
@@ -255,7 +262,7 @@ export function KpiFreshdeskImportDialog({
                 />
                 <p className="text-xs text-muted-foreground">
                   Preview mirrors Freshdesk sections: Activity, Time, SLA Performance, and CSAT. Apply updates mapped Hub KPI
-                  fields only — use the Changes tab before replacing an existing import.
+                  fields for selected agents only.
                 </p>
               </div>
             ) : null}
@@ -291,6 +298,28 @@ export function KpiFreshdeskImportDialog({
                   </p>
                 ) : null}
 
+                {needsReplaceConfirm ? (
+                  <div className="shrink-0 space-y-2 rounded-md border border-amber-300/80 bg-amber-50/50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/20">
+                    <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                      Replace existing import for this period
+                    </p>
+                    <p className="text-xs text-amber-900/90 dark:text-amber-100/90">
+                      An import was already applied for {parseResult.import.periodStart}–{parseResult.import.periodEnd}
+                      {parseResult.previousAppliedImport?.originalFilename
+                        ? ` (${parseResult.previousAppliedImport.originalFilename})`
+                        : ""}
+                      . Applying this PDF will update Hub KPI records for checked agents. Highlighted cells show values that
+                      change; strikethrough is the current Hub value, bold is the new PDF value.
+                    </p>
+                    <KpiFreshdeskImportReplacementCompare
+                      rows={preview.rows}
+                      selectionDraft={selectionDraft}
+                      mappingDraft={mappingDraft}
+                      previousFilename={parseResult.previousAppliedImport?.originalFilename}
+                    />
+                  </div>
+                ) : null}
+
                 <KpiFreshdeskImportPreviewTable
                   rows={preview.rows}
                   selectionDraft={selectionDraft}
@@ -308,13 +337,17 @@ export function KpiFreshdeskImportDialog({
 
                 <div className="shrink-0 space-y-3 border-t pt-3">
                   {needsReplaceConfirm ? (
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="flex items-start gap-2 text-sm">
                       <input
                         type="checkbox"
+                        className="mt-1"
                         checked={confirmReplace}
                         onChange={(e) => setConfirmReplace(e.target.checked)}
                       />
-                      Replace existing imported data for this reporting period
+                      <span>
+                        I reviewed the KPI comparison above and confirm replacing the existing import for this reporting
+                        period.
+                      </span>
                     </label>
                   ) : null}
 
@@ -351,23 +384,21 @@ export function KpiFreshdeskImportDialog({
           </TabsContent>
 
           <TabsContent value="history" className="mt-0 min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4 data-[state=inactive]:hidden">
-            {historyQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-            {historyQuery.data?.imports.length ? (
-              <ul className="space-y-2 text-sm">
-                {historyQuery.data.imports.map((item) => (
-                  <li key={item.id} className="rounded-md border p-2">
-                    <div className="font-medium">{item.originalFilename}</div>
-                    <div className="text-muted-foreground">
-                      {item.periodType} {item.periodStart} – {item.periodEnd} · {item.status}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No imports yet.</p>
-            )}
+            <KpiFreshdeskImportHistoryList
+              imports={historyQuery.data?.imports ?? []}
+              isLoading={historyQuery.isLoading}
+              onView={(id) => setHistoryViewId(id)}
+            />
           </TabsContent>
         </Tabs>
+
+        <KpiFreshdeskImportHistoryViewDialog
+          importId={historyViewId}
+          open={Boolean(historyViewId)}
+          onOpenChange={(next) => {
+            if (!next) setHistoryViewId(null);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

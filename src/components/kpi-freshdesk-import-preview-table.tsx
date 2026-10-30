@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -5,7 +6,6 @@ import {
   formatFreshdeskCount,
   formatFreshdeskPercent,
   formatFreshdeskTimeSeconds,
-  formatKpiFieldDiffValue,
   type FreshdeskAgentMetricsPayload,
 } from "@/lib/freshdesk-import-format";
 
@@ -87,49 +87,97 @@ const CSAT_COLUMNS: MetricColumn[] = [
   { id: "total", header: "Total", cell: (m) => formatFreshdeskCount(m.csat.total) },
 ];
 
-function HubMappingCell({
+function isRowMatched(row: ImportPreviewRow, mappingDraft: Record<string, string>): boolean {
+  if (row.match.status === "exact" && row.match.agentId) return true;
+  return Boolean(mappingDraft[row.normalizedName]);
+}
+
+export function rowNeedsManualMatching(
+  row: ImportPreviewRow,
+  selectionDraft: Set<string>,
+  mappingDraft: Record<string, string>,
+): boolean {
+  if (!selectionDraft.has(row.normalizedName)) return false;
+  return !isRowMatched(row, mappingDraft);
+}
+
+/** Selected matched → unselected → selected needs manual matching. */
+export function sortPreviewRows(
+  rows: ImportPreviewRow[],
+  selectionDraft: Set<string>,
+  mappingDraft: Record<string, string>,
+): ImportPreviewRow[] {
+  const tier = (row: ImportPreviewRow) => {
+    const selected = selectionDraft.has(row.normalizedName);
+    if (!selected) return 1;
+    if (rowNeedsManualMatching(row, selectionDraft, mappingDraft)) return 2;
+    return 0;
+  };
+  return [...rows].sort((a, b) => {
+    const byTier = tier(a) - tier(b);
+    if (byTier !== 0) return byTier;
+    return a.sourceName.localeCompare(b.sourceName, undefined, { sensitivity: "base" });
+  });
+}
+
+function AgentCell({
   row,
-  included,
+  selectionDraft,
   agents,
   mappingDraft,
+  onToggleSelection,
   onMappingChange,
 }: {
   row: ImportPreviewRow;
-  included: boolean;
+  selectionDraft: Set<string>;
   agents: HubAgent[];
   mappingDraft: Record<string, string>;
+  onToggleSelection: (normalizedName: string, checked: boolean) => void;
   onMappingChange: (normalizedName: string, agentId: string) => void;
 }) {
-  if (!included) return <span className="text-muted-foreground">—</span>;
-  if (row.match.status === "exact" && row.match.agentId) {
-    return (
-      <span className="truncate" title={agents.find((a) => a.id === row.match.agentId)?.name || row.match.agentId}>
-        {agents.find((a) => a.id === row.match.agentId)?.name || row.match.agentId}
-      </span>
-    );
-  }
+  const included = selectionDraft.has(row.normalizedName);
+  const needsMatch = rowNeedsManualMatching(row, selectionDraft, mappingDraft);
+
   return (
-    <Select
-      value={mappingDraft[row.normalizedName] || ""}
-      onValueChange={(value) => onMappingChange(row.normalizedName, value)}
-    >
-      <SelectTrigger className="h-7 w-full min-w-[8.5rem] text-xs">
-        <SelectValue placeholder="Map to Hub" />
-      </SelectTrigger>
-      <SelectContent>
-        {agents.map((a) => (
-          <SelectItem key={a.id} value={a.id}>
-            {a.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex min-w-[10rem] items-start gap-2">
+      <input
+        type="checkbox"
+        className="mt-0.5 size-3.5 shrink-0"
+        checked={included}
+        aria-label={`Include ${row.sourceName} in import`}
+        onChange={(e) => onToggleSelection(row.normalizedName, e.target.checked)}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="font-medium leading-snug">{row.sourceName}</div>
+        {needsMatch ? (
+          <div className="mt-1.5 flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center">
+            <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">Needs matching</span>
+            <Select
+              value={mappingDraft[row.normalizedName] || ""}
+              onValueChange={(value) => onMappingChange(row.normalizedName, value)}
+            >
+              <SelectTrigger className="h-7 max-w-[14rem] text-xs">
+                <SelectValue placeholder="Select Hub user" />
+              </SelectTrigger>
+              <SelectContent>
+                {agents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
 function SectionTable({
   rows,
   columns,
+  readOnly = false,
   selectionDraft,
   agents,
   mappingDraft,
@@ -138,6 +186,7 @@ function SectionTable({
 }: {
   rows: ImportPreviewRow[];
   columns: MetricColumn[];
+  readOnly?: boolean;
   selectionDraft: Set<string>;
   agents: HubAgent[];
   mappingDraft: Record<string, string>;
@@ -149,9 +198,7 @@ function SectionTable({
       <table className="w-full border-collapse text-left text-xs">
         <thead className="sticky top-0 z-10 border-b bg-muted/50 backdrop-blur-sm">
           <tr>
-            <th className="w-9 px-2 py-1.5" aria-label="Include in import" />
-            <th className="min-w-[7.5rem] px-2 py-1.5 font-medium">Agent</th>
-            <th className="min-w-[9rem] px-2 py-1.5 font-medium">Hub agent</th>
+            <th className="min-w-[11rem] px-2 py-1.5 font-medium">Agent</th>
             {columns.map((col) => (
               <th key={col.id} className={`whitespace-nowrap px-2 py-1.5 font-medium ${col.className ?? ""}`}>
                 {col.header}
@@ -165,33 +212,21 @@ function SectionTable({
             return (
               <tr
                 key={row.normalizedName}
-                className={`border-b border-border/60 ${included ? "" : "bg-muted/15 text-muted-foreground"}`}
+                className={`border-b border-border/60 ${readOnly || included ? "" : "text-muted-foreground"}`}
               >
-                <td className="px-2 py-1.5 align-middle">
-                  <input
-                    type="checkbox"
-                    className="size-3.5"
-                    checked={included}
-                    aria-label={`Include ${row.sourceName} in import`}
-                    onChange={(e) => onToggleSelection(row.normalizedName, e.target.checked)}
-                  />
-                </td>
-                <td className="px-2 py-1.5 align-middle font-medium">
-                  <div className="flex flex-wrap items-center gap-1">
-                    <span>{row.sourceName}</span>
-                    {!included ? (
-                      <span className="rounded bg-muted px-1 py-0 text-[10px] font-normal uppercase">Excluded</span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="max-w-[11rem] px-2 py-1.5 align-middle">
-                  <HubMappingCell
-                    row={row}
-                    included={included}
-                    agents={agents}
-                    mappingDraft={mappingDraft}
-                    onMappingChange={onMappingChange}
-                  />
+                <td className="px-2 py-1.5 align-top">
+                  {readOnly ? (
+                    <span className="font-medium">{row.sourceName}</span>
+                  ) : (
+                    <AgentCell
+                      row={row}
+                      selectionDraft={selectionDraft}
+                      agents={agents}
+                      mappingDraft={mappingDraft}
+                      onToggleSelection={onToggleSelection}
+                      onMappingChange={onMappingChange}
+                    />
+                  )}
                 </td>
                 {columns.map((col) => (
                   <td key={col.id} className={`whitespace-nowrap px-2 py-1.5 tabular-nums align-middle ${col.className ?? ""}`}>
@@ -200,93 +235,6 @@ function SectionTable({
                 ))}
               </tr>
             );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ChangesTable({
-  rows,
-  selectionDraft,
-  agents,
-  mappingDraft,
-  onToggleSelection,
-  onMappingChange,
-}: {
-  rows: ImportPreviewRow[];
-  selectionDraft: Set<string>;
-  agents: HubAgent[];
-  mappingDraft: Record<string, string>;
-  onToggleSelection: (normalizedName: string, checked: boolean) => void;
-  onMappingChange: (normalizedName: string, agentId: string) => void;
-}) {
-  const rowsWithChanges = rows
-    .map((row) => ({
-      row,
-      changes: row.kpiDiff.filter((d) => d.changed),
-    }))
-    .filter(({ changes }) => changes.length > 0);
-
-  if (!rowsWithChanges.length) {
-    return (
-      <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-        No KPI field differences detected for this PDF versus current Hub records.
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-0 flex-1 overflow-auto rounded-md border">
-      <table className="w-full border-collapse text-left text-xs">
-        <thead className="sticky top-0 z-10 border-b bg-muted/50 backdrop-blur-sm">
-          <tr>
-            <th className="w-9 px-2 py-1.5" aria-label="Include in import" />
-            <th className="min-w-[7.5rem] px-2 py-1.5">Agent</th>
-            <th className="min-w-[9rem] px-2 py-1.5">Hub agent</th>
-            <th className="min-w-[10rem] px-2 py-1.5">KPI field</th>
-            <th className="px-2 py-1.5">Before</th>
-            <th className="w-8 px-1 py-1.5 text-center">→</th>
-            <th className="px-2 py-1.5">After</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rowsWithChanges.map(({ row, changes }) => {
-            const included = selectionDraft.has(row.normalizedName);
-            return changes.map((diff, index) => (
-              <tr key={`${row.normalizedName}-${diff.field}`} className="border-b border-border/60">
-                {index === 0 ? (
-                  <>
-                    <td className="px-2 py-1.5 align-top" rowSpan={changes.length}>
-                      <input
-                        type="checkbox"
-                        className="size-3.5"
-                        checked={included}
-                        aria-label={`Include ${row.sourceName} in import`}
-                        onChange={(e) => onToggleSelection(row.normalizedName, e.target.checked)}
-                      />
-                    </td>
-                    <td className="px-2 py-1.5 align-top font-medium" rowSpan={changes.length}>
-                      {row.sourceName}
-                    </td>
-                    <td className="max-w-[11rem] px-2 py-1.5 align-top" rowSpan={changes.length}>
-                      <HubMappingCell
-                        row={row}
-                        included={included}
-                        agents={agents}
-                        mappingDraft={mappingDraft}
-                        onMappingChange={onMappingChange}
-                      />
-                    </td>
-                  </>
-                ) : null}
-                <td className="px-2 py-1.5 align-middle">{diff.label}</td>
-                <td className="px-2 py-1.5 tabular-nums align-middle">{formatKpiFieldDiffValue(diff.field, diff.existing)}</td>
-                <td className="px-1 py-1.5 text-center align-middle text-muted-foreground">→</td>
-                <td className="px-2 py-1.5 tabular-nums align-middle">{formatKpiFieldDiffValue(diff.field, diff.incoming)}</td>
-              </tr>
-            ));
           })}
         </tbody>
       </table>
@@ -305,6 +253,7 @@ export function KpiFreshdeskImportPreviewTable({
   onDeselectAll,
   selectedCount,
   totalAgents,
+  readOnly = false,
 }: {
   rows: ImportPreviewRow[];
   selectionDraft: Set<string>;
@@ -312,14 +261,21 @@ export function KpiFreshdeskImportPreviewTable({
   mappingDraft: Record<string, string>;
   onToggleSelection: (normalizedName: string, checked: boolean) => void;
   onMappingChange: (normalizedName: string, agentId: string) => void;
-  onSelectAll: () => void;
-  onDeselectAll: () => void;
-  selectedCount: number;
-  totalAgents: number;
+  onSelectAll?: () => void;
+  onDeselectAll?: () => void;
+  selectedCount?: number;
+  totalAgents?: number;
+  readOnly?: boolean;
 }) {
+  const sortedRows = useMemo(() => {
+    if (readOnly) return rows;
+    return sortPreviewRows(rows, selectionDraft, mappingDraft);
+  }, [readOnly, rows, selectionDraft, mappingDraft]);
+
   const tableProps = {
-    rows,
-    selectionDraft,
+    rows: sortedRows,
+    readOnly,
+    selectionDraft: readOnly ? new Set<string>() : selectionDraft,
     agents,
     mappingDraft,
     onToggleSelection,
@@ -328,19 +284,21 @@ export function KpiFreshdeskImportPreviewTable({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span className="text-muted-foreground">
-          {selectedCount} of {totalAgents} Agents selected
-        </span>
-        <div className="flex gap-1">
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onSelectAll}>
-            Select all
-          </Button>
-          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onDeselectAll}>
-            Deselect all
-          </Button>
+      {!readOnly ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span className="text-muted-foreground">
+            {selectedCount} of {totalAgents} Agents selected
+          </span>
+          <div className="flex gap-1">
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onSelectAll}>
+              Select all
+            </Button>
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onDeselectAll}>
+              Deselect all
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <Tabs defaultValue="activity" className="flex min-h-0 flex-1 flex-col gap-2">
         <TabsList className="h-8 w-fit shrink-0 flex-wrap gap-0.5">
@@ -356,9 +314,6 @@ export function KpiFreshdeskImportPreviewTable({
           <TabsTrigger value="csat" className="h-7 px-2.5 text-xs">
             CSAT
           </TabsTrigger>
-          <TabsTrigger value="changes" className="h-7 px-2.5 text-xs">
-            Changes
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="activity" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
@@ -372,12 +327,6 @@ export function KpiFreshdeskImportPreviewTable({
         </TabsContent>
         <TabsContent value="csat" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
           <SectionTable {...tableProps} columns={CSAT_COLUMNS} />
-        </TabsContent>
-        <TabsContent value="changes" className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
-          <p className="mb-2 shrink-0 text-xs text-muted-foreground">
-            Hub KPI fields that will change when you apply (selected agents only). PDF-only metrics stay in the import record.
-          </p>
-          <ChangesTable {...tableProps} />
         </TabsContent>
       </Tabs>
     </div>

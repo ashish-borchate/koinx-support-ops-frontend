@@ -1,8 +1,21 @@
 import { Fragment, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { ErrorBlock, LoadingBlock, PageHeader } from "@/components/bits";
+import { DataTableShell, ErrorBlock, LoadingBlock, PageHeader } from "@/components/bits";
+import { ManagementCompareDialog } from "@/components/management/management-compare-dialog";
+import {
+  ManagementOperationalDetailsDialog,
+} from "@/components/management/management-operational-details-dialog";
+import {
+  COMPLETED_WORK_CATEGORIES,
+  liveModuleLabel,
+  type DrillDownTarget,
+  type ManagementDrillModule,
+} from "@/components/management/management-drill-down.constants";
+import {
+  KpiPerformanceDeepLink,
+  ScorecardBreakdownPanel,
+} from "@/components/kpi/scorecard-breakdown-panel";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
@@ -50,7 +63,7 @@ type OverviewPayload = {
     delta: { overall: number | null };
   }[];
   completed: Record<string, Record<string, number | string | undefined>>;
-  live: Record<string, { label: string; count: number; href?: string; tone?: string }[]>;
+  live: Record<string, { categoryKey: string; label: string; count: number; href?: string; tone?: string }[]>;
 };
 
 function deltaText(value: number | null, suffix = " pts") {
@@ -96,26 +109,37 @@ function WorkstreamBlock({
   title,
   rows,
   period,
+  liveBadge,
+  onMetricClick,
 }: {
   title: string;
-  rows: { label: string; count: number; href?: string; tone?: string }[];
+  rows: { categoryKey: string; label: string; count: number; tone?: string }[];
   period?: boolean;
+  liveBadge?: boolean;
+  onMetricClick?: (categoryKey: string, count: number) => void;
 }) {
   return (
     <div className="rounded-xl border border-border/60 bg-card p-4 shadow-[var(--shadow-card)]">
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      {period ? (
-        <p className="text-xs text-muted-foreground">Counts for selected reporting period</p>
-      ) : (
-        <p className="text-xs text-muted-foreground">Live — not affected by period filter</p>
-      )}
+      <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
+        {title}
+        {liveBadge ? (
+          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+            Live
+          </span>
+        ) : null}
+      </p>
+      {period ? <p className="text-xs text-muted-foreground">Counts for selected reporting period</p> : null}
       <ul className="mt-3 space-y-1.5">
         {rows.map((row) => (
-          <li key={row.label} className="flex items-center justify-between gap-2 text-sm">
-            {row.href ? (
-              <Link className="text-primary hover:underline" to={row.href}>
+          <li key={row.categoryKey} className="flex items-center justify-between gap-2 text-sm">
+            {onMetricClick ? (
+              <button
+                type="button"
+                className="text-left text-primary hover:underline"
+                onClick={() => onMetricClick(row.categoryKey, row.count)}
+              >
                 {row.label}
-              </Link>
+              </button>
             ) : (
               <span className="text-muted-foreground">{row.label}</span>
             )}
@@ -140,6 +164,16 @@ export function ManagementOverviewPage() {
   const [month, setMonth] = useState(() => monthKey());
   const [agentFilter, setAgentFilter] = useState("all");
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [drillScope, setDrillScope] = useState<"live" | "completed">("live");
+  const [drillTarget, setDrillTarget] = useState<DrillDownTarget | null>(null);
+
+  const openDrillDown = (scope: "live" | "completed", module: ManagementDrillModule, category: string) => {
+    setDrillScope(scope);
+    setDrillTarget({ scope, module, category });
+    setDrillOpen(true);
+  };
 
   const queryKey = ["management-overview", periodType, week, month];
   const query = useQuery({
@@ -250,8 +284,31 @@ export function ManagementOverviewPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => setCompareOpen(true)}>
+              Compare Results
+            </Button>
           </div>
         }
+      />
+
+      <ManagementCompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        periodType={periodType}
+        periodAKey={periodType === "weekly" ? week : month}
+        agents={data.agents.map((a) => ({ id: a.id, name: a.name }))}
+      />
+
+      <ManagementOperationalDetailsDialog
+        open={drillOpen}
+        onOpenChange={setDrillOpen}
+        scope={drillScope}
+        periodType={periodType}
+        week={week}
+        month={month}
+        target={drillTarget}
+        liveCounts={data.live}
+        completedCounts={data.completed}
       />
 
       <p className="text-sm text-muted-foreground">
@@ -281,155 +338,146 @@ export function ManagementOverviewPage() {
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">Agent performance</h2>
         <p className="text-xs text-muted-foreground">
-          Team summary above stays unchanged when filtering agents. Operational sections below are always live.
+          Team summary above stays unchanged when filtering agents. Click a row to expand metric details.
         </p>
-        <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
+        <DataTableShell className="overflow-x-auto">
+          <table className="w-full min-w-[920px] table-fixed text-sm">
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[11%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+            </colgroup>
+            <thead className="border-b border-border/60 bg-muted/20 text-left text-xs text-muted-foreground">
               <tr>
-                <th className="px-3 py-2.5">Agent</th>
-                <th className="px-3 py-2.5 text-right">Overall KPI</th>
-                <th className="px-3 py-2.5 text-right">QA</th>
-                <th className="px-3 py-2.5 text-right">CSAT</th>
-                <th className="px-3 py-2.5 text-right">SLA</th>
-                <th className="px-3 py-2.5 text-right">FRT</th>
-                <th className="px-3 py-2.5 text-right">ART</th>
-                <th className="px-3 py-2.5 text-right">Resolution</th>
-                <th className="px-3 py-2.5" />
+                <th className="px-3 py-2.5 font-medium">Agent</th>
+                <th className="px-3 py-2.5 font-medium text-right">Overall KPI</th>
+                <th className="px-3 py-2.5 font-medium text-right">QA</th>
+                <th className="px-3 py-2.5 font-medium text-right">CSAT</th>
+                <th className="px-3 py-2.5 font-medium text-right">SLA</th>
+                <th className="px-3 py-2.5 font-medium text-right">FRT</th>
+                <th className="px-3 py-2.5 font-medium text-right">ART</th>
+                <th className="px-3 py-2.5 font-medium text-right">Resolution</th>
+                <th className="w-10 px-2 py-2.5 font-medium" aria-label="Expand" />
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {filteredAgents.map((agent) => {
                 const m = (id: string) => agent.scorecard?.metrics.find((x) => x.id === id);
-                const open = expandedAgent === agent.id;
+                const expanded = expandedAgent === agent.id;
                 return (
                   <Fragment key={agent.id}>
-                    <tr className="hover:bg-muted/20">
-                      <td className="px-3 py-2.5 font-medium">{agent.name}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">
+                    <tr
+                      className="cursor-pointer border-t border-border/50 hover:bg-muted/25"
+                      onClick={() => setExpandedAgent(expanded ? null : agent.id)}
+                    >
+                      <td className="whitespace-nowrap px-3 py-2 font-medium text-foreground">{agent.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
                         {agent.scorecard?.compositeDisplay ?? "—"}
-                        {agent.delta.overall != null ? (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            ({deltaText(agent.delta.overall)})
-                          </span>
-                        ) : null}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{m("qa")?.actualLabel ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{m("csat")?.actualLabel ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{m("sla")?.actualLabel ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{m("frt")?.actualLabel ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{m("art")?.actualLabel ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{m("resolution")?.actualLabel ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8"
-                          onClick={() => setExpandedAgent(open ? null : agent.id)}
+                      <td className="px-3 py-2 text-right tabular-nums">{m("qa")?.actualLabel ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m("csat")?.actualLabel ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m("sla")?.actualLabel ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m("frt")?.actualLabel ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m("art")?.actualLabel ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{m("resolution")?.actualLabel ?? "—"}</td>
+                      <td className="px-2 py-2">
+                        <span
+                          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground"
+                          aria-hidden
                         >
-                          <ChevronDown className={cn("size-4", open && "rotate-180")} />
-                        </Button>
+                          <ChevronDown className={cn("size-4 motion-safe:transition-transform", expanded && "rotate-180")} />
+                        </span>
                       </td>
                     </tr>
-                    {open ? (
-                      <tr className="bg-muted/15">
-                        <td colSpan={9} className="px-3 py-3 text-xs text-muted-foreground">
-                          {agent.scorecard?.metrics.map((metric) => (
-                            <span key={metric.id} className="mr-4 inline-block">
-                              {metric.label}: {metric.actualLabel} · earned {metric.pointsDisplay}
-                            </span>
-                          ))}
-                          {!agent.hasKpiRow && agent.qaReviewCount > 0 ? (
-                            <span className="block mt-1">No Freshdesk KPI row — QA-only score for this period.</span>
-                          ) : null}
-                          <Link className="mt-2 inline-block text-primary hover:underline" to={`/kpi?periodType=${periodType}&${periodType === "monthly" ? `month=${month}` : `week=${week}`}&agentId=${agent.id}`}>
-                            Open in KPI Performance
-                          </Link>
-                        </td>
-                      </tr>
-                    ) : null}
+                    <tr className="border-t border-border/40 bg-muted/20">
+                      <td colSpan={9} className="p-0">
+                        <div
+                          className={cn(
+                            "grid motion-safe:transition-[grid-template-rows] motion-safe:duration-200",
+                            expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                          )}
+                        >
+                          <div className="overflow-hidden">
+                            <ScorecardBreakdownPanel
+                              scorecard={agent.scorecard}
+                              className="px-3 py-3"
+                              emptyMessage={
+                                !agent.hasKpiRow && agent.qaReviewCount > 0
+                                  ? "No Freshdesk KPI row — QA-only score for this period."
+                                  : "No KPI scorecard for this period."
+                              }
+                              footer={
+                                <>
+                                  {!agent.hasKpiRow && agent.qaReviewCount > 0 ? (
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                      QA reviews in period: {agent.qaReviewCount}
+                                    </p>
+                                  ) : null}
+                                  <KpiPerformanceDeepLink
+                                    periodType={periodType}
+                                    week={week}
+                                    month={month}
+                                    agentId={agent.id}
+                                  />
+                                </>
+                              }
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
                   </Fragment>
                 );
               })}
             </tbody>
           </table>
-        </div>
+        </DataTableShell>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-foreground">Work completed — selected period</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <WorkstreamBlock
-            title="Product Guides"
-            period
-            rows={[
-              { label: "Updated", count: Number(data.completed.productGuides?.updated ?? 0) },
-              { label: "Reviewed", count: Number(data.completed.productGuides?.reviewed ?? 0) },
-              { label: "Approved", count: Number(data.completed.productGuides?.approved ?? 0) },
-              { label: "Published", count: Number(data.completed.productGuides?.published ?? 0) },
-            ]}
-          />
-          <WorkstreamBlock
-            title="Integration Steps"
-            period
-            rows={[
-              { label: "Updated", count: Number(data.completed.integrationSteps?.updated ?? 0) },
-              { label: "Reviewed", count: Number(data.completed.integrationSteps?.reviewed ?? 0) },
-              { label: "Approved", count: Number(data.completed.integrationSteps?.approved ?? 0) },
-              { label: "Published by Tech", count: Number(data.completed.integrationSteps?.publishedByTech ?? 0) },
-            ]}
-          />
-          <WorkstreamBlock
-            title="Supported Files"
-            period
-            rows={[
-              { label: "Added", count: Number(data.completed.supportedFiles?.added ?? 0) },
-              { label: "Updated / replaced", count: Number(data.completed.supportedFiles?.updated ?? 0) },
-            ]}
-          />
-          <WorkstreamBlock
-            title="Negative Reviews"
-            period
-            rows={[
-              { label: "Reviews logged", count: Number(data.completed.negativeReviews?.reviewed ?? 0) },
-              { label: "Coaching completed", count: Number(data.completed.negativeReviews?.coachingCompleted ?? 0) },
-              { label: "Agent ack completed", count: Number(data.completed.negativeReviews?.agentAckCompleted ?? 0) },
-            ]}
-          />
-          <WorkstreamBlock
-            title="Product Feedback"
-            period
-            rows={[
-              { label: "Supervisor reviewed", count: Number(data.completed.productFeedback?.reviewed ?? 0) },
-              { label: "Approved", count: Number(data.completed.productFeedback?.approved ?? 0) },
-              { label: "Shared in Slack", count: Number(data.completed.productFeedback?.sharedInSlack ?? 0) },
-            ]}
-          />
-          <WorkstreamBlock
-            title="Token Migration"
-            period
-            rows={[
-              { label: "Migrations recorded", count: Number(data.completed.tokenMigration?.recorded ?? 0) },
-              { label: "Tech acknowledgements", count: Number(data.completed.tokenMigration?.techAckCompleted ?? 0) },
-            ]}
-          />
+          {(Object.keys(COMPLETED_WORK_CATEGORIES) as ManagementDrillModule[]).map((mod) => (
+            <WorkstreamBlock
+              key={mod}
+              title={liveModuleLabel(mod)}
+              period
+              rows={COMPLETED_WORK_CATEGORIES[mod].map((def) => ({
+                categoryKey: def.categoryKey,
+                label: def.label,
+                count: Number(data.completed[mod]?.[def.countKey] ?? 0),
+              }))}
+              onMetricClick={(categoryKey) => openDrillDown("completed", mod, categoryKey)}
+            />
+          ))}
         </div>
       </section>
 
       <section className="space-y-3 border-t border-border/60 pt-6">
         <h2 className="text-sm font-semibold text-foreground">Current pending &amp; overdue work</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {Object.entries(data.live).map(([key, rows]) => (
-            <WorkstreamBlock
-              key={key}
-              title={key
-                .replace(/([A-Z])/g, " $1")
-                .replace(/^./, (c) => c.toUpperCase())
-                .trim()}
-              rows={rows}
-            />
-          ))}
+          {(Object.entries(data.live) as [ManagementDrillModule, OverviewPayload["live"][string]][]).map(
+            ([mod, rows]) => (
+              <WorkstreamBlock
+                key={mod}
+                title={liveModuleLabel(mod)}
+                liveBadge
+                rows={rows.map((r) => ({
+                  categoryKey: r.categoryKey,
+                  label: r.label,
+                  count: r.count,
+                  tone: r.tone,
+                }))}
+                onMetricClick={(categoryKey) => openDrillDown("live", mod, categoryKey)}
+              />
+            ),
+          )}
         </div>
       </section>
     </div>

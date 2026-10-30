@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { IstDatePicker } from "@/components/ui/ist-date-picker";
 
 export function DateRangeDialog({
   open,
@@ -42,15 +42,17 @@ export function DateRangeDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">From date</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <IstDatePicker value={from} onChange={setFrom} max={to || undefined} aria-label="From date" />
           </div>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">To date</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <IstDatePicker value={to} onChange={setTo} min={from || undefined} aria-label="To date" />
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button
             type="button"
             disabled={!from && !to}

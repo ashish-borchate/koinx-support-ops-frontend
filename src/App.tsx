@@ -26,6 +26,10 @@ import { CoachingPage } from "@/pages/coaching";
 import { ManagementOverviewPage } from "@/pages/management-overview";
 import { SupportUpdatesPage } from "@/pages/support-updates";
 import { DeletedReportedIssuesPage, ReportedIssuesPage, ReportedIssueDetailPage } from "@/pages/reported-issues";
+import { AgentCalendarPage } from "@/pages/agent-calendar";
+import { LegacyPerformanceRedirect, PerformanceCenterPage } from "@/pages/performance-center";
+import { NotificationsPage } from "@/pages/notifications";
+import { NotificationSettingsPage } from "@/pages/notification-settings";
 import { LoadingBlock } from "@/components/bits";
 
 const HandbookRoutes = lazy(() =>
@@ -175,8 +179,81 @@ export default function App() {
         <Route path="/reported-issues" element={<Permit any={["reported_issues.view_all", "reported_issues.view_own"]}><ReportedIssuesPage /></Permit>} />
         <Route path="/reported-issues/deleted" element={<Permit any={["reported_issues.view_all"]}><DeletedReportedIssuesPage /></Permit>} />
         <Route path="/reported-issues/:id" element={<Permit any={["reported_issues.view_all", "reported_issues.view_own"]}><ReportedIssueDetailPage /></Permit>} />
+        <Route
+          path="/performance-center"
+          element={
+            <Permit
+              any={[
+                "agent_activity.view_own",
+                "agent_activity.view_team",
+                "team_performance.view_team",
+                "weekly_reviews.view_own",
+                "weekly_reviews.view_team",
+                "weekly_reviews.manage",
+              ]}
+            >
+              <PerformanceCenterPage />
+            </Permit>
+          }
+        />
+        <Route
+          path="/agent-activity"
+          element={
+            <Permit any={["agent_activity.view_own", "agent_activity.view_team"]}>
+              <LegacyPerformanceRedirect mode="agent" />
+            </Permit>
+          }
+        />
+        <Route
+          path="/agent-calendar"
+          element={
+            <Permit any={["agent_calendar.view_own", "agent_calendar.view_team"]}>
+              <AgentCalendarPage />
+            </Permit>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <Permit any={["notification_center.view_own", "notification_center.view_team"]}>
+              <NotificationsPage />
+            </Permit>
+          }
+        />
+        <Route
+          path="/team-attention"
+          element={
+            <Permit any={["notification_center.view_team"]}>
+              <LegacyPerformanceRedirect mode="attention" />
+            </Permit>
+          }
+        />
+        <Route
+          path="/team-performance"
+          element={
+            <Permit any={["team_performance.view_team"]}>
+              <LegacyPerformanceRedirect mode="team" />
+            </Permit>
+          }
+        />
+        <Route
+          path="/weekly-agent-reviews"
+          element={
+            <Permit any={["weekly_reviews.view_own", "weekly_reviews.view_team", "weekly_reviews.manage"]}>
+              <LegacyPerformanceRedirect mode="weekly" />
+            </Permit>
+          }
+        />
         <Route path="/weekly" element={<Navigate to="/" replace />} />
         <Route path="/admin/people" element={<Permit any={["users.manage"]}><PeoplePage /></Permit>} />
+        <Route
+          path="/admin/notification-settings"
+          element={
+            <Permit any={["notification_center.manage"]}>
+              <NotificationSettingsPage />
+            </Permit>
+          }
+        />
         <Route path="/admin/freshdesk" element={<Navigate to="/" replace />} />
         <Route path="/admin/audit" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

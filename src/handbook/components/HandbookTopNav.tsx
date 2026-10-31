@@ -56,7 +56,7 @@ export function HandbookTopNav() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <nav
           className="-mx-1 flex flex-wrap items-center gap-1 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          aria-label="Handbook sections"
+          aria-label="Hub Handbook sections"
         >
           {tabs.map((tab) => {
             const Icon = tab.icon;

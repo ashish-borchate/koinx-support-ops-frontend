@@ -29,7 +29,7 @@ const WEEKDAY_PICKERS: { label: string; dow: number }[] = [
 ];
 
 const TAB_TRIGGER_CLASS =
-  "h-10 rounded-lg border border-border bg-muted/40 px-2 text-sm whitespace-nowrap shadow-none transition-colors after:!hidden after:!content-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:border-primary data-[state=active]:bg-primary/10 data-[state=active]:font-semibold data-[state=active]:text-foreground sm:px-3";
+  "h-10 flex-1 rounded-lg border border-border bg-muted/40 px-2 text-sm whitespace-nowrap shadow-none transition-colors after:!hidden after:!content-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:!border-primary data-[state=active]:!bg-primary/10 data-[state=active]:font-semibold data-[state=active]:!text-foreground data-[state=active]:!shadow-none dark:data-[state=active]:!border-primary dark:data-[state=active]:!bg-primary/10 sm:px-3";
 
 type Props = {
   open: boolean;
@@ -248,7 +248,7 @@ export function CalendarSettingsSheet({
 
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
           <div className="shrink-0 px-6 pb-4 pt-4">
-            <TabsList className="grid h-auto w-full grid-cols-3 gap-2 bg-transparent p-0">
+            <TabsList variant="line" className="flex h-auto w-full gap-2 border-0 bg-transparent p-0 shadow-none">
               <TabsTrigger value="weekly-off" className={TAB_TRIGGER_CLASS}>
                 Weekly off
               </TabsTrigger>

@@ -43,4 +43,4 @@ Some roles can use **View As** from the account menu to see another employee’s
 2. Check **Support Updates** for anything requiring acknowledgement.
 3. Use the sidebar to jump into the module you are working on.
 
-Role-specific routines are in your **playbook** under Handbook → My role playbook.
+Role-specific routines are in your **playbook** under Hub Handbook → My role playbook.

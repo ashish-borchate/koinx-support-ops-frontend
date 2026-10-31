@@ -14,7 +14,7 @@ New accounts are created by an **Admin** — Google Sign-In does not auto-create
 
 The left sidebar groups modules:
 
-- **Overview** — Dashboard, Handbook, Management Overview (if you have access), Support Updates, Reported Issues
+- **Overview** — Dashboard, Hub Handbook, Management Overview (if you have access), Support Updates, Reported Issues
 - **Quality & performance** — KPI, QA, Negative Reviews, Coaching
 - **Knowledge & product** — Product Guides, Integration Steps, Supported Files, Token Migration, Product Feedback, Feature Impact, Knowledge Base
 

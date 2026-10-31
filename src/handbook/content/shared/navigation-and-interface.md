@@ -10,8 +10,8 @@ The Support Hub uses a **left sidebar** on desktop and a **menu sheet** on small
 
 | Group | Examples |
 | --- | --- |
-| Overview | Dashboard, Handbook, Management Overview, Support Updates, Reported Issues |
-| Quality & performance | KPI Performance, Quality Assurance, Negative Reviews, Coaching |
+| Overview | Dashboard, Hub Handbook, Management Overview, Support Updates, Reported Issues |
+| Quality & performance | KPI Performance, Performance Center, Shift Calendar, Quality Assurance, Negative Reviews, Coaching |
 | Knowledge & product | Product Guides, Integration Steps, Supported Files, and more |
 
 Collapse a group by clicking its header; your preference is saved in the browser.
@@ -24,9 +24,9 @@ Collapse a group by clicking its header; your preference is saved in the browser
 - **Theme** (light / dark)
 - **Log out**
 
-## Handbook
+## Hub Handbook
 
-Open **Handbook** under Overview for training, playbooks, walkthroughs, and search.
+Open **Hub Handbook** under Overview for training, playbooks, walkthroughs, and search.
 
 ## View As
 

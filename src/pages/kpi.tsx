@@ -526,8 +526,15 @@ function WeeklyTeamArtCard({
             reporting week and relevant support group, and leave the Agent filter unselected.
           </p>
         </div>
-        <div className="w-full shrink-0 sm:w-48">
-          <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Team ART (h)</Label>
+        <div className="w-full shrink-0 sm:w-52">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Team ART (h)</Label>
+            {canEdit && persisted && !editing ? (
+              <Button type="button" size="sm" className="h-8 shrink-0" variant="outline" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            ) : null}
+          </div>
           <KpiDurationField
             label="Team average response time"
             value={hours}
@@ -539,39 +546,31 @@ function WeeklyTeamArtCard({
               Not recorded
             </p>
           ) : null}
-          {canEdit ? (
+          {canEdit && (editing || !persisted) ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              {persisted && !editing ? (
-                <Button type="button" size="sm" className="h-8" variant="outline" onClick={() => setEditing(true)}>
-                  Edit
+              {persisted && editing ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditing(false);
+                    setHours(savedHours);
+                  }}
+                >
+                  Cancel
                 </Button>
-              ) : (
-                <>
-                  {persisted && editing ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8"
-                      variant="ghost"
-                      onClick={() => {
-                        setEditing(false);
-                        setHours(savedHours);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8"
-                    disabled={save.isPending || hours.trim() === "" || (persisted && !dirty)}
-                    onClick={() => save.mutate()}
-                  >
-                    {persisted ? "Save changes" : "Save team ART"}
-                  </Button>
-                </>
-              )}
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                disabled={save.isPending || hours.trim() === "" || (persisted && !dirty)}
+                onClick={() => save.mutate()}
+              >
+                {persisted ? "Save changes" : "Save team ART"}
+              </Button>
             </div>
           ) : null}
         </div>

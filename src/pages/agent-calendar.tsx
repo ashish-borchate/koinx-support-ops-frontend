@@ -430,13 +430,13 @@ export function AgentCalendarPage() {
   };
 
   if (!can("agent_calendar.view_own") && !canTeam) {
-    return <Empty title="No access" body="You do not have permission to view agent calendars." />;
+    return <Empty title="No access" body="You do not have permission to view Shift Calendar." />;
   }
 
   return (
     <div className="space-y-5 p-4 sm:p-6">
       <PageHeader
-        title="Agent Calendar"
+        title="Shift Calendar"
         description="Working days, leave approvals, weekly offs, and holidays (IST)."
       />
 

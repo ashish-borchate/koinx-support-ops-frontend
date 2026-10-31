@@ -23,7 +23,7 @@ The **KoinX Support Hub** (Support Operations in the app) is your team’s inter
 
 Everyone signs in to the same application, but your **role** changes which modules you see and what you are responsible for day to day. Your **permissions** control what the app allows; your **job responsibilities** may include tasks that only apply to certain people (for example, only the designated reporting owner completes Daily DSAT checks).
 
-Use the **Handbook** for shared concepts, then open **your role playbook** for routines that match your job.
+Use **Hub Handbook** for shared concepts, then open **your role playbook** for routines that match your job.
 
 ## Where to go next
 

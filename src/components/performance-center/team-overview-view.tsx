@@ -40,29 +40,21 @@ export function TeamOverviewView({ data, onSelectAgent, onOpenDetails }: Props) 
         <Empty title="No agents" body="No canonical agents found for comparison." />
       ) : (
         <div className="overflow-x-auto rounded-xl border bg-card shadow-[var(--shadow-card)]">
-          <table className="w-full min-w-[980px] table-fixed text-sm">
-            <colgroup>
-              <col className="w-[21%]" />
-              <col className="w-[30%]" />
-              <col className="w-[9%]" />
-              <col className="w-[10%]" />
-              <col className="w-[8%]" />
-              <col className="w-[22%]" />
-            </colgroup>
+          <table className="w-full min-w-[1040px] table-auto border-collapse text-sm">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Agent</th>
-                <th className="px-3 py-2 font-medium">Work completed</th>
-                <th className="px-4 py-2 font-medium text-right">QA</th>
-                <th className="px-4 py-2 font-medium text-right">KPI</th>
-                <th className="px-4 py-2 font-medium text-right">Overdue</th>
-                <th className="px-4 py-2 pr-5 font-medium">Attention</th>
+                <th className="whitespace-nowrap px-4 py-2 font-medium">Agent</th>
+                <th className="px-4 py-2 font-medium">Work completed</th>
+                <th className="w-[1%] whitespace-nowrap px-3 py-2 font-medium text-right">QA</th>
+                <th className="w-[1%] whitespace-nowrap px-3 py-2 font-medium text-right">KPI</th>
+                <th className="w-[1%] whitespace-nowrap px-3 py-2 font-medium text-right">Overdue</th>
+                <th className="w-[1%] whitespace-nowrap px-4 py-2 font-medium">Attention</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.agentId} className="border-b last:border-0 hover:bg-muted/30">
-                  <td className="whitespace-nowrap px-3 py-1.5 align-middle">
+                  <td className="whitespace-nowrap px-4 py-1.5 align-middle">
                     <button
                       type="button"
                       className="text-left font-medium text-primary hover:underline"
@@ -72,19 +64,19 @@ export function TeamOverviewView({ data, onSelectAgent, onOpenDetails }: Props) 
                     </button>
                   </td>
                   <td
-                    className="cursor-pointer whitespace-nowrap px-3 py-1.5 align-middle text-xs tabular-nums text-muted-foreground sm:text-sm"
+                    className="cursor-pointer whitespace-nowrap px-4 py-1.5 align-middle text-xs tabular-nums text-muted-foreground sm:text-sm"
                     onClick={() => onSelectAgent(row.agentId)}
                   >
                     {workCompletedBreakdown(row)}
                   </td>
-                  <td className="px-4 py-1.5 text-right align-middle tabular-nums">
+                  <td className="w-[1%] cursor-default whitespace-nowrap px-3 py-1.5 text-right align-middle tabular-nums">
                     <MetricLink
                       value={fmtNum(row.qaAverage)}
                       ariaLabel={`Open QA for ${row.name}`}
                       onClick={() => onOpenDetails(row.agentId, "qa")}
                     />
                   </td>
-                  <td className="px-4 py-1.5 text-right align-middle tabular-nums">
+                  <td className="w-[1%] whitespace-nowrap px-3 py-1.5 text-right align-middle tabular-nums">
                     <MetricLink
                       value={row.kpiComposite ?? "—"}
                       ariaLabel={`Open KPI for ${row.name}`}
@@ -93,14 +85,14 @@ export function TeamOverviewView({ data, onSelectAgent, onOpenDetails }: Props) 
                   </td>
                   <td
                     className={cn(
-                      "cursor-pointer px-4 py-1.5 text-right align-middle tabular-nums",
+                      "w-[1%] cursor-pointer whitespace-nowrap px-3 py-1.5 text-right align-middle tabular-nums",
                       row.riOverdueNow > 0 && "font-medium text-destructive",
                     )}
                     onClick={() => onSelectAgent(row.agentId)}
                   >
                     {row.riOverdueNow}
                   </td>
-                  <td className="cursor-pointer px-4 py-1.5 pr-5 align-middle" onClick={() => onSelectAgent(row.agentId)}>
+                  <td className="w-[1%] cursor-pointer whitespace-nowrap px-4 py-1.5 align-middle" onClick={() => onSelectAgent(row.agentId)}>
                     <span
                       className={cn(
                         "inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium",

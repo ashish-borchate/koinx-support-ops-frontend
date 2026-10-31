@@ -91,13 +91,16 @@ export function LoginPage() {
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
             Access is limited to employee accounts created by an administrator. Google Sign-In does not create new accounts.
           </p>
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            Having trouble signing in with Google? Contact Ashish or Prabhat for assistance with fallback login.
+          </p>
           <div className="mt-6 border-t border-border pt-4">
             <button
               type="button"
-              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
               onClick={() => setShowPasswordLogin((open) => !open)}
             >
-              {showPasswordLogin ? "Hide password sign-in" : "Sign in with password (admin fallback)"}
+              {showPasswordLogin ? "Hide email and password sign-in" : "Sign in with email and password"}
             </button>
             {showPasswordLogin ? (
               <form
@@ -124,7 +127,7 @@ export function LoginPage() {
                   </p>
                 ) : null}
                 <Button type="submit" variant="outline" className="w-full" disabled={pending}>
-                  {pending ? "Signing in…" : "Sign in with password"}
+                  {pending ? "Signing in…" : "Sign in with email and password"}
                 </Button>
               </form>
             ) : null}

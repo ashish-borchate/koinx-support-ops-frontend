@@ -53,7 +53,7 @@ function HandbookSearchForm({ className }: { className?: string }) {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Search workflows, responsibilities, troubleshooting…"
         className="h-10"
-        aria-label="Search handbook"
+        aria-label="Search Hub Handbook"
       />
       <Button type="submit">Search</Button>
     </form>
@@ -189,7 +189,7 @@ function DiscoverChapterPage() {
     <div className="mx-auto w-full max-w-6xl pb-6">
       <HandbookBreadcrumbs
         items={[
-          { label: "Handbook", to: "/handbook" },
+          { label: "Hub Handbook", to: "/handbook" },
           { label: "Discover the Hub", to: "/handbook/discover" },
           { label: ref.title },
         ]}
@@ -262,7 +262,7 @@ function RoleHandbookPage() {
     <HandbookLearningArticle
       doc={{ ...doc, title: `${rh.title} — responsibilities`, description: rh.description }}
       breadcrumbs={[
-        { label: "Handbook", to: "/handbook" },
+        { label: "Hub Handbook", to: "/handbook" },
         { label: "My role", to: "/handbook/role" },
         { label: rh.title },
       ]}

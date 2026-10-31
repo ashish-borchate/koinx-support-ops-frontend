@@ -65,7 +65,7 @@ const groups: NavGroup[] = [
     label: "Overview",
     links: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, any: [] },
-      { to: "/handbook", label: "Handbook", icon: GraduationCap, any: [] },
+      { to: "/handbook", label: "Hub Handbook", icon: GraduationCap, any: [] },
       { to: "/management", label: "Management Overview", icon: LineChart, any: ["management.view"] },
       { to: "/support-updates", label: "Support Updates", icon: Megaphone, any: ["support_updates.view"] },
       { to: "/reported-issues", label: "Reported Issues", icon: Flag, any: ["reported_issues.view_all", "reported_issues.view_own"] },
@@ -89,7 +89,7 @@ const groups: NavGroup[] = [
           "weekly_reviews.manage",
         ],
       },
-      { to: "/agent-calendar", label: "Agent Calendar", icon: UserRound, any: ["agent_calendar.view_own", "agent_calendar.view_team"] },
+      { to: "/agent-calendar", label: "Shift Calendar", icon: UserRound, any: ["agent_calendar.view_own", "agent_calendar.view_team"] },
       { to: "/qa", label: "Quality Assurance", icon: ClipboardCheck, any: ["qa.view_team", "qa.view_own", "qa.create"] },
       { to: "/negative-reviews/dashboard", label: "Negative Reviews", icon: LayoutDashboard, any: ["negative_reviews.dashboard", "negative_reviews.tracker"] },
       { to: "/coaching", label: "Coaching Center", icon: GraduationCap, any: ["coaching.view_team", "coaching.view_own"] },

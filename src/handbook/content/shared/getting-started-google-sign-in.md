@@ -37,7 +37,7 @@ You can change your password later from the account menu → **Change password**
 
 - Your name and role appear in the header account menu.
 - The sidebar shows modules your role can access.
-- Open **Handbook** under Overview anytime for training material.
+- Open **Hub Handbook** under Overview anytime for training material.
 
 ## Privacy
 

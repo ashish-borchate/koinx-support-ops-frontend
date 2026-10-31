@@ -1,8 +1,16 @@
 import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Eye, EyeOff, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +33,8 @@ type UserRow = {
 type Role = { key: string; name: string; description: string; assignable: boolean };
 
 const ROLE_SECTION_ORDER = ["admin", "supervisor", "senior_agent", "agent", "tech_agent"] as const;
+
+const PASSWORD_REQUIREMENTS = "At least 8 characters, at most 72, and include both a letter and a number.";
 
 function roleSectionIndex(roleKey: string) {
   const index = ROLE_SECTION_ORDER.indexOf(roleKey as (typeof ROLE_SECTION_ORDER)[number]);
@@ -61,12 +71,20 @@ function sortRolesForSelect(roles: Role[]) {
   return [...roles].sort((a, b) => roleSectionIndex(a.key) - roleSectionIndex(b.key) || a.name.localeCompare(b.name));
 }
 
+function validatePasswordClient(password: string): string | null {
+  if (password.length < 8) return "Password must be at least 8 characters";
+  if (password.length > 72) return "Password must be 72 characters or fewer";
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Password must include a letter and a number";
+  return null;
+}
+
 export function PeoplePage() {
   const { canMutate, user: actor } = useAuth();
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [resetting, setResetting] = useState<UserRow | null>(null);
+  const [fallbackPassword, setFallbackPassword] = useState<UserRow | null>(null);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
   const [showArchived, setShowArchived] = useState(true);
   const users = useQuery({ queryKey: ["users-admin"], queryFn: () => api<{ users: UserRow[] }>("/api/users") });
@@ -79,34 +97,46 @@ export function PeoplePage() {
     },
     onError: (error) => toast.error(error.message),
   });
+  const resendInvite = useMutation({
+    mutationFn: (person: UserRow) => api<{ devInvitePath?: string }>(`/api/users/${person.id}/resend-invite`, { method: "POST" }),
+    onSuccess: (data) => {
+      if (data?.devInvitePath) toast.success(`Invite resent. Dev link: ${data.devInvitePath}`);
+      else toast.success("Invitation resent");
+      void client.invalidateQueries({ queryKey: ["users-admin"] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const assignable = new Set((roles.data?.roles || []).filter((role) => role.assignable).map((role) => role.key));
   const visibleUsers = users.data?.users.filter((person) => showArchived || person.active) ?? [];
   const userGroups = groupUsersByRole(visibleUsers);
 
   function renderUserRow(person: UserRow) {
     const manageable = canMutate("users.manage") && assignable.has(person.roleKey) && person.id !== actor?.id;
+    const canResetPassword = canMutate("users.reset_password") && manageable;
     return (
-      <tr key={person.id} className="border-t">
-        <td className="px-4 py-3">
-          <p className="font-medium">{person.name}</p>
-          <p className="text-xs text-muted-foreground">{person.title}</p>
-        </td>
-        <td className="px-3 py-3">{person.email}</td>
-        <td className="px-3 py-3">{person.roleName}</td>
-        <td className="px-3 py-3">{person.active ? "Active" : "Archived"}</td>
-        <td className="px-3 py-3">
+      <tr key={person.id} className="border-t border-border align-middle">
+        <td className="max-w-[12rem] px-3 py-2 font-medium">{person.name}</td>
+        <td className="min-w-[10rem] max-w-xs break-words px-3 py-2 text-muted-foreground">{person.email}</td>
+        <td className="whitespace-nowrap px-3 py-2">{person.roleName}</td>
+        <td className="whitespace-nowrap px-3 py-2">{person.active ? "Active" : "Archived"}</td>
+        <td className="whitespace-nowrap px-3 py-2">
           {!person.active ? "—" : person.emailVerified ? "Activated" : "Invite pending"}
         </td>
-        <td className="px-3 py-3">{person.createdAt ? formatWhen(person.createdAt) : "—"}</td>
-        <td className="px-3 py-3">
-          {manageable ? (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => setEditing(person)}>Edit</Button>
-              <Button variant="outline" size="sm" onClick={() => toggle.mutate(person)}>{person.active ? "Archive" : "Restore"}</Button>
-              {canMutate("users.reset_password") ? <Button variant="outline" size="sm" onClick={() => setResetting(person)}>Send reset link</Button> : null}
-              {canMutate("users.manage") && person.active && !person.emailVerified ? <ResendInviteButton person={person} /> : null}
-              <Button variant="outline" size="sm" className="text-rose-700" onClick={() => setDeleting(person)}>Delete</Button>
-            </div>
+        <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{person.createdAt ? formatWhen(person.createdAt) : "—"}</td>
+        <td className="w-px whitespace-nowrap px-2 py-2 text-right">
+          {manageable || canResetPassword ? (
+            <UserActionsMenu
+              person={person}
+              manageable={manageable}
+              canResetPassword={canResetPassword}
+              onEdit={() => setEditing(person)}
+              onToggleArchive={() => toggle.mutate(person)}
+              onSendResetLink={() => setResetting(person)}
+              onSetFallbackPassword={() => setFallbackPassword(person)}
+              onResendInvite={() => resendInvite.mutate(person)}
+              resendPending={resendInvite.isPending}
+              onDelete={() => setDeleting(person)}
+            />
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
           )}
@@ -134,26 +164,28 @@ export function PeoplePage() {
       />
       {users.isLoading ? <LoadingBlock /> : null}
       {users.isError ? <ErrorBlock message={users.error.message} /> : null}
-      <div className="overflow-x-auto rounded-2xl border bg-card">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead className="text-left text-muted-foreground">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+        <table className="w-full min-w-[880px] border-collapse text-sm">
+          <thead className="border-b border-border text-left text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Name</th>
-              <th className="px-3 py-3 font-medium">Email</th>
-              <th className="px-3 py-3 font-medium">Role</th>
-              <th className="px-3 py-3 font-medium">Status</th>
-              <th className="px-3 py-3 font-medium">Access</th>
-              <th className="px-3 py-3 font-medium">Created</th>
-              <th className="px-3 py-3 font-medium">Actions</th>
+              <th className="px-3 py-2 font-medium">Name</th>
+              <th className="px-3 py-2 font-medium">Email</th>
+              <th className="px-3 py-2 font-medium">Role</th>
+              <th className="px-3 py-2 font-medium">Status</th>
+              <th className="px-3 py-2 font-medium">Access</th>
+              <th className="px-3 py-2 font-medium">Created</th>
+              <th className="px-3 py-2 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {userGroups.map((group) => (
               <Fragment key={group.roleKey}>
-                <tr className="border-t bg-muted/30">
-                  <td colSpan={7} className="px-4 py-2.5">
-                    <p className="text-xs font-semibold tracking-wide text-primary uppercase">{group.roleName}</p>
-                    <p className="text-[11px] text-muted-foreground">{group.users.length} {group.users.length === 1 ? "person" : "people"}</p>
+                <tr className="border-t border-border bg-muted/40">
+                  <td colSpan={7} className="px-3 py-1.5">
+                    <span className="text-xs font-semibold tracking-wide text-primary uppercase">{group.roleName}</span>
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      · {group.users.length} {group.users.length === 1 ? "person" : "people"}
+                    </span>
                   </td>
                 </tr>
                 {group.users.map((person) => renderUserRow(person))}
@@ -164,9 +196,74 @@ export function PeoplePage() {
       </div>
       {open && roles.data ? <UserDialog roles={roles.data.roles.filter((role) => role.assignable)} onClose={() => setOpen(false)} /> : null}
       {editing && roles.data ? <UserDialog roles={roles.data.roles.filter((role) => role.assignable)} person={editing} onClose={() => setEditing(null)} /> : null}
-      {resetting ? <ResetPassword person={resetting} onClose={() => setResetting(null)} /> : null}
+      {resetting ? <ResetPasswordEmail person={resetting} onClose={() => setResetting(null)} /> : null}
+      {fallbackPassword ? <SetFallbackPassword person={fallbackPassword} onClose={() => setFallbackPassword(null)} /> : null}
       {deleting ? <DeleteUser person={deleting} onClose={() => setDeleting(null)} /> : null}
     </div>
+  );
+}
+
+function UserActionsMenu({
+  person,
+  manageable,
+  canResetPassword,
+  onEdit,
+  onToggleArchive,
+  onSendResetLink,
+  onSetFallbackPassword,
+  onResendInvite,
+  resendPending,
+  onDelete,
+}: {
+  person: UserRow;
+  manageable: boolean;
+  canResetPassword: boolean;
+  onEdit: () => void;
+  onToggleArchive: () => void;
+  onSendResetLink: () => void;
+  onSetFallbackPassword: () => void;
+  onResendInvite: () => void;
+  resendPending: boolean;
+  onDelete: () => void;
+}) {
+  const showResend = manageable && person.active && !person.emailVerified;
+  const showResetLink = canResetPassword && person.active && person.emailVerified;
+  const showFallback = canResetPassword && person.active;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 gap-1 px-2">
+          Actions
+          <MoreHorizontal className="size-4 opacity-60" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={4} className="min-w-[12rem]">
+        {manageable ? (
+          <>
+            <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onToggleArchive}>{person.active ? "Archive" : "Restore"}</DropdownMenuItem>
+          </>
+        ) : null}
+        {showResend ? (
+          <DropdownMenuItem onSelect={onResendInvite} disabled={resendPending}>
+            Resend invite
+          </DropdownMenuItem>
+        ) : null}
+        {showResetLink ? <DropdownMenuItem onSelect={onSendResetLink}>Send reset link</DropdownMenuItem> : null}
+        {showFallback ? (
+          <DropdownMenuItem onSelect={onSetFallbackPassword}>Set / Reset fallback password</DropdownMenuItem>
+        ) : null}
+        {manageable ? (
+          <>
+            {(showResend || showResetLink || showFallback) ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+              Delete
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -260,25 +357,7 @@ function DeleteUser({ person, onClose }: { person: UserRow; onClose: () => void 
   );
 }
 
-function ResendInviteButton({ person }: { person: UserRow }) {
-  const client = useQueryClient();
-  const resend = useMutation({
-    mutationFn: () => api<{ devInvitePath?: string }>(`/api/users/${person.id}/resend-invite`, { method: "POST" }),
-    onSuccess: (data) => {
-      if (data?.devInvitePath) toast.success(`Invite resent. Dev link: ${data.devInvitePath}`);
-      else toast.success("Invitation resent");
-      void client.invalidateQueries({ queryKey: ["users-admin"] });
-    },
-    onError: (error) => toast.error(error.message),
-  });
-  return (
-    <Button variant="outline" size="sm" onClick={() => resend.mutate()} disabled={resend.isPending}>
-      Resend invite
-    </Button>
-  );
-}
-
-function ResetPassword({ person, onClose }: { person: UserRow; onClose: () => void }) {
+function ResetPasswordEmail({ person, onClose }: { person: UserRow; onClose: () => void }) {
   const save = useMutation({
     mutationFn: () => api<{ devResetPath?: string }>(`/api/users/${person.id}/send-password-reset`, { method: "POST" }),
     onSuccess: (data) => {
@@ -295,7 +374,117 @@ function ResetPassword({ person, onClose }: { person: UserRow; onClose: () => vo
         <p className="text-sm text-muted-foreground">
           A single-use link will be emailed to <strong>{person.email}</strong>. It expires after a short time.
         </p>
-        <DialogFooter><Button onClick={() => save.mutate()} disabled={save.isPending}>Send email</Button></DialogFooter>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>Send email</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SetFallbackPassword({ person, onClose }: { person: UserRow; onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [confirmedReplace, setConfirmedReplace] = useState(false);
+  const [fieldError, setFieldError] = useState("");
+
+  const save = useMutation({
+    mutationFn: () => api(`/api/users/${person.id}/password`, { method: "POST", body: JSON.stringify({ password }) }),
+    onSuccess: () => {
+      toast.success("Fallback password updated");
+      onClose();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  function submit() {
+    setFieldError("");
+    const problem = validatePasswordClient(password);
+    if (problem) {
+      setFieldError(problem);
+      return;
+    }
+    if (password !== confirm) {
+      setFieldError("Password and confirmation do not match");
+      return;
+    }
+    if (!confirmedReplace) {
+      setFieldError("Confirm that you want to replace the current fallback password");
+      return;
+    }
+    save.mutate();
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Set / Reset fallback password</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 text-sm">
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+            <p className="font-medium text-foreground">{person.name}</p>
+            <p className="break-all text-muted-foreground">{person.email}</p>
+          </div>
+          {!person.emailVerified ? (
+            <p className="text-muted-foreground">
+              This account is not activated yet. You can set a fallback password now, but email and password sign-in will only work after the employee activates their account (invitation link or first Google sign-in).
+            </p>
+          ) : null}
+          <p className="text-muted-foreground">
+            This replaces any existing fallback password immediately. Share the new password with the employee through a secure channel — it is never shown here again.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="fallback-new">New password</Label>
+            <div className="relative">
+              <Input
+                id="fallback-new"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fallback-confirm">Confirm password</Label>
+            <Input
+              id="fallback-confirm"
+              type={showPassword ? "text" : "password"}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">{PASSWORD_REQUIREMENTS}</p>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={confirmedReplace}
+              onChange={(e) => setConfirmedReplace(e.target.checked)}
+            />
+            <span>I confirm this will replace the employee&apos;s current fallback password (if any).</span>
+          </label>
+          {fieldError ? <p className="text-destructive">{fieldError}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Confirm"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

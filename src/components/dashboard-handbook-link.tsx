@@ -10,7 +10,7 @@ export function DashboardHandbookLink() {
         className="inline-flex items-center gap-1.5 text-muted-foreground underline-offset-2 hover:text-primary hover:underline motion-safe:transition-colors"
       >
         <GraduationCap className="size-4 opacity-70" aria-hidden />
-        Handbook &amp; training
+        Hub Handbook &amp; training
       </Link>
     </p>
   );

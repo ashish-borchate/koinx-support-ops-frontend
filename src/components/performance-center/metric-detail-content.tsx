@@ -66,7 +66,7 @@ export function MetricDetailContent({ metric, data }: { metric: MetricDrillDown;
           {data.productGuides.weeklyOffConfigured === false ? (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100">
               No weekly-off schedule applies in this period for this agent. Every calendar day in the range counts as a
-              working day except company holidays and approved full-day leave. Configure weekly offs in Agent Calendar
+              working day except company holidays and approved full-day leave. Configure weekly offs in Shift Calendar
               settings if required reviews should exclude specific days.
             </p>
           ) : null}

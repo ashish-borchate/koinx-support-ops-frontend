@@ -54,6 +54,7 @@ export type AgentDashboard = {
   };
   productGuides: {
     eligibleWorkingDays: number;
+    reviewsSubmittedInPeriod?: number;
     completedRequiredReviews: number;
     missedRequiredReviews: number;
     compliancePercent: number | null;

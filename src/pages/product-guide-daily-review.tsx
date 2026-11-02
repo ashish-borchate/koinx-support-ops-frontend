@@ -11,9 +11,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Empty, ErrorBlock, LoadingBlock, PageHeader } from "@/components/bits";
 import { GuideContentViewer } from "@/components/guide-content-viewer";
+import { DocumentationDetailCard } from "@/components/documentation-detail-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { normalizeDocumentationSource } from "@/lib/documentation-links";
 import { formatWhen } from "@/lib/format";
+import { toKoinxPublishedDocumentationUrl } from "@/lib/koinx-published-url";
+import {
+  PG_REVIEW_SCREENSHOT_ACCEPT,
+  fileToUploadPayload,
+  formatFileSize,
+} from "@/lib/pg-review-screenshot";
 import { STALE } from "@/lib/query-client";
 import { ChevronRight } from "lucide-react";
 import {
@@ -46,6 +54,9 @@ type ReviewGuidePayload = {
     productArea: string;
     summary: string;
     content: string;
+    documentationSource?: string;
+    workingDocUrl?: string;
+    mintlifyUrl?: string;
     publishedContentVersionAt: string;
   };
   rotationId: string;
@@ -294,6 +305,7 @@ export function ProductGuideDailyReviewFormPage() {
   const [q4, setQ4] = useState("");
   const [q4d, setQ4d] = useState("");
   const [q5, setQ5] = useState("");
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
 
   const payload = useQuery({
     queryKey: ["pg-daily-review-guide", guideId],
@@ -303,8 +315,12 @@ export function ProductGuideDailyReviewFormPage() {
   });
 
   const submit = useMutation({
-    mutationFn: (): Promise<{ message?: string }> =>
-      api<{ message?: string }>(`/api/product-guides/daily-review/${guideId}/submit`, {
+    mutationFn: async (): Promise<{ message?: string }> => {
+      let outdatedScreenshot: Awaited<ReturnType<typeof fileToUploadPayload>> | undefined;
+      if (q2 === "no" && screenshotFile) {
+        outdatedScreenshot = await fileToUploadPayload(screenshotFile);
+      }
+      return api<{ message?: string }>(`/api/product-guides/daily-review/${guideId}/submit`, {
         method: "POST",
         body: JSON.stringify({
           publishedContentVersionAt: payload.data!.guide.publishedContentVersionAt,
@@ -315,12 +331,16 @@ export function ProductGuideDailyReviewFormPage() {
             linksWorking: { answer: q4, details: q4 === "no" ? q4d : undefined },
             suggestions: q5.trim() || undefined,
           },
+          ...(outdatedScreenshot ? { outdatedScreenshot } : {}),
         }),
-      }),
+      });
+    },
     onSuccess: (res: { message?: string }) => {
       toast.success(res.message || "Review submitted");
       void client.invalidateQueries({ queryKey: ["pg-daily-review"] });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
+      void client.invalidateQueries({ queryKey: ["agent-activity"] });
+      void client.invalidateQueries({ queryKey: ["team-performance"] });
       navigate("/product-guides/daily-review");
     },
     onError: (e) => toast.error(e.message),
@@ -336,12 +356,24 @@ export function ProductGuideDailyReviewFormPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader eyebrow={guide.productArea} title={guide.title} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Published guide content</CardTitle></CardHeader>
-          <CardContent>
-            <GuideContentViewer content={guide.content || guide.summary} title={guide.title} />
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <DocumentationDetailCard
+            kind="productGuides"
+            recordId={guide.id}
+            workflowSnapshot="Published"
+            source={normalizeDocumentationSource(guide.documentationSource)}
+            workingDocUrl={guide.workingDocUrl || ""}
+            confirmedPublishedUrl={toKoinxPublishedDocumentationUrl(guide.mintlifyUrl || "")}
+            publicationPhase="published"
+            layout="compact"
+          />
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Published guide content</CardTitle></CardHeader>
+            <CardContent>
+              <GuideContentViewer content={guide.content || guide.summary} title={guide.title} />
+            </CardContent>
+          </Card>
+        </div>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Your review</CardTitle></CardHeader>
           <CardContent className="space-y-5">
@@ -354,9 +386,27 @@ export function ProductGuideDailyReviewFormPage() {
             </div>
             <div className="space-y-2">
               <Label>Are the screenshots and UI instructions accurate?</Label>
-              <YesNoNa value={q2} onChange={setQ2} allowNa />
+              <YesNoNa value={q2} onChange={(v) => { setQ2(v); if (v !== "no") setScreenshotFile(null); }} allowNa />
               {q2 === "no" ? (
-                <Textarea value={q2d} onChange={(e) => setQ2d(e.target.value)} placeholder="Which screenshots or steps are outdated?" />
+                <>
+                  <Textarea value={q2d} onChange={(e) => setQ2d(e.target.value)} placeholder="Which screenshots or steps are outdated?" />
+                  <div className="space-y-2">
+                    <Label htmlFor="pg-outdated-screenshot" className="text-muted-foreground font-normal">
+                      Screenshot showing outdated UI (optional)
+                    </Label>
+                    <Input
+                      id="pg-outdated-screenshot"
+                      type="file"
+                      accept={PG_REVIEW_SCREENSHOT_ACCEPT}
+                      onChange={(e) => setScreenshotFile(e.target.files?.[0] ?? null)}
+                    />
+                    {screenshotFile ? (
+                      <p className="text-xs text-muted-foreground">
+                        {screenshotFile.name} · {formatFileSize(screenshotFile.size)}
+                      </p>
+                    ) : null}
+                  </div>
+                </>
               ) : null}
             </div>
             <div className="space-y-2">

@@ -206,7 +206,7 @@ export function AgentActivityPage() {
           <SectionHeader title="Performance overview" description="Activity during the selected period unless labeled current." />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard title="Eligible working days" value={String(d.overview.eligibleWorkingDays)} />
-            <MetricCard title="Guide reviews (required days)" value={String(d.overview.productGuideReviewsCompleted)} />
+            <MetricCard title="Product Guide Reviews" value={String(d.overview.productGuideReviewsCompleted)} />
             <MetricCard title="Guide compliance" value={fmtPercent(d.overview.productGuideCompliancePercent)} />
             <MetricCard
               title="Product Feedback submitted"

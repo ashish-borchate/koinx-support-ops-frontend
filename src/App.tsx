@@ -24,6 +24,7 @@ import { QaRandomAuditsPage } from "@/pages/qa-random-audits";
 import { QaAppealDetailPage, QaAppealsPage } from "@/pages/qa-appeals";
 import { CoachingPage } from "@/pages/coaching";
 import { ManagementOverviewPage } from "@/pages/management-overview";
+import { SupportAnalyticsPage } from "@/pages/support-analytics";
 import { SupportUpdatesPage } from "@/pages/support-updates";
 import { DeletedReportedIssuesPage, ReportedIssuesPage, ReportedIssueDetailPage } from "@/pages/reported-issues";
 import { AgentCalendarPage } from "@/pages/agent-calendar";
@@ -101,6 +102,14 @@ export default function App() {
         <Route path="/view-as" element={<Permit any={["view_as"]}><ViewAsPage /></Permit>} />
         <Route path="/kpi" element={<Permit any={["kpi.view_team", "kpi.view_own"]}><KpiPage /></Permit>} />
         <Route path="/management" element={<Permit any={["management.view"]}><ManagementOverviewPage /></Permit>} />
+        <Route
+          path="/support-analytics"
+          element={
+            <Permit any={["support_analytics.view_team", "support_analytics.view_own"]}>
+              <SupportAnalyticsPage />
+            </Permit>
+          }
+        />
         <Route path="/daily-dsat" element={<NrDailyDsatPage />} />
         <Route path="/qa" element={<Permit any={["qa.view_team", "qa.view_own", "qa.create"]}><QaListPage /></Permit>} />
         <Route path="/qa/random-audits" element={<Permit any={["qa.random_audit.view_team"]}><QaRandomAuditsPage /></Permit>} />

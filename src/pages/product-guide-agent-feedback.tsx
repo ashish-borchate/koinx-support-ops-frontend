@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { formatCalendarDate, formatWhen } from "@/lib/format";
 import { STALE } from "@/lib/query-client";
 import { ProductGuideTabLink } from "@/components/product-guide-tabs";
+import { pgReviewOutdatedScreenshotPath } from "@/lib/pg-review-screenshot";
 
 type FeedbackSummary = {
   stats: { totalReviews: number; reviewsWithIssues: number; guidesWithFeedback: number; reviewsToday: number };
@@ -126,6 +127,7 @@ export function ProductGuideAgentFeedbackDetailPage() {
           rotationId: string;
           hasIssues: boolean;
           answers: Record<string, { answer?: string; details?: string; suggestions?: string }>;
+          outdatedScreenshot?: { originalName: string; contentType: string; size: number } | null;
         }[];
       }>(`/api/product-guides/agent-feedback/${guideId}?${qs.toString()}`);
     },
@@ -173,6 +175,33 @@ export function ProductGuideAgentFeedbackDetailPage() {
                 {rev.answers.informationCorrect?.details ? ` — ${rev.answers.informationCorrect.details}` : ""}</p>
               <p><strong>Screenshots/UI:</strong> {rev.answers.screenshotsAccurate?.answer}
                 {rev.answers.screenshotsAccurate?.details ? ` — ${rev.answers.screenshotsAccurate.details}` : ""}</p>
+              {rev.outdatedScreenshot ? (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Outdated UI screenshot</p>
+                  <p className="text-xs text-muted-foreground">{rev.outdatedScreenshot.originalName}</p>
+                  {rev.outdatedScreenshot.contentType.startsWith("image/") ? (
+                    <a
+                      href={pgReviewOutdatedScreenshotPath(rev.id, true)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block"
+                    >
+                      <img
+                        src={pgReviewOutdatedScreenshotPath(rev.id, true)}
+                        alt="Screenshot attached to review"
+                        className="max-h-64 max-w-full rounded-md border object-contain"
+                      />
+                    </a>
+                  ) : (
+                    <a
+                      href={pgReviewOutdatedScreenshotPath(rev.id, false)}
+                      className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+                    >
+                      Download attachment
+                    </a>
+                  )}
+                </div>
+              ) : null}
               <p><strong>Missing information:</strong> {rev.answers.missingInformation?.answer}
                 {rev.answers.missingInformation?.details ? ` — ${rev.answers.missingInformation.details}` : ""}</p>
               <p><strong>Links:</strong> {rev.answers.linksWorking?.answer}

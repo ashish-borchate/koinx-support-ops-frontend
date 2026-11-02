@@ -52,7 +52,7 @@ export function AgentPerformanceView({
             value={fmtPercent(d.overview.productGuideCompliancePercent)}
             note={
               d.overview.eligibleWorkingDays > 0
-                ? `${d.overview.productGuideReviewsCompleted} of ${d.overview.eligibleWorkingDays} working days`
+                ? `${d.productGuides.completedRequiredReviews} of ${d.overview.eligibleWorkingDays} working days`
                 : undefined
             }
             icon={ClipboardCheck}

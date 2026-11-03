@@ -24,6 +24,8 @@ import { formatPublicationTimestamp, formatWhen } from "@/lib/format";
 import { STALE } from "@/lib/query-client";
 import { moduleIndexSegment } from "@/lib/module-nav";
 import { TruncatedHoverField } from "@/components/truncated-hover-field";
+import { AddSupportedFileDialog } from "@/components/supported-file-add-dialog";
+import { fileToUploadPayload } from "@/lib/issue-attachments";
 import { cn } from "@/lib/utils";
 
 type SupportedFileRow = {
@@ -127,20 +129,6 @@ function FileTypeChip({
       {needsReview ? <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden /> : null}
     </button>
   );
-}
-
-async function fileToUploadPayload(file: File) {
-  const data = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.includes(",") ? result.split(",")[1] : result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error("Could not read file"));
-    reader.readAsDataURL(file);
-  });
-  return { originalName: file.name, contentType: file.type || "application/octet-stream", data };
 }
 
 function SupportedFilesIndex() {
@@ -493,150 +481,6 @@ export function SupportedFilesTrackerPage() {
         onClose={() => setDetailId(null)}
       />
     </div>
-  );
-}
-
-function resetAddSupportedFileForm(
-  setters: {
-    setExchangeName: (v: string) => void;
-    setFileName: (v: string) => void;
-    setUpdatedReason: (v: string) => void;
-    setPendingFile: (v: File | null) => void;
-  },
-) {
-  setters.setExchangeName("");
-  setters.setFileName("");
-  setters.setUpdatedReason("");
-  setters.setPendingFile(null);
-}
-
-function AddSupportedFileDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const client = useQueryClient();
-  const addFileRef = useRef<HTMLInputElement>(null);
-  const [exchangeName, setExchangeName] = useState("");
-  const [fileName, setFileName] = useState("");
-  const [updatedReason, setUpdatedReason] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const exchanges = useQuery({
-    queryKey: ["supported-files-exchanges"],
-    queryFn: () => api<{ exchanges: string[] }>("/api/supported-files/exchanges"),
-    enabled: open,
-  });
-
-  function handleOpenChange(next: boolean) {
-    if (!next) {
-      resetAddSupportedFileForm({
-        setExchangeName,
-        setFileName,
-        setUpdatedReason,
-        setPendingFile,
-      });
-    }
-    onOpenChange(next);
-  }
-
-  const create = useMutation({
-    mutationFn: async () => {
-      const created = await api<{ item: { id: string } }>("/api/supported-files", {
-        method: "POST",
-        body: JSON.stringify({
-          exchangeName: exchangeName.trim(),
-          fileName: fileName.trim(),
-          updatedReason,
-        }),
-      });
-      const newId = created.item.id;
-      if (pendingFile) {
-        const payload = await fileToUploadPayload(pendingFile);
-        await api(`/api/supported-files/${newId}/attachment`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-      }
-      return newId;
-    },
-    onSuccess: () => {
-      toast.success("Supported file added");
-      handleOpenChange(false);
-      void client.invalidateQueries({ queryKey: ["supported-files-list"] });
-      void client.invalidateQueries({ queryKey: ["supported-files-dashboard"] });
-      void client.invalidateQueries({ queryKey: ["supported-files-exchanges"] });
-    },
-    onError: (e) => toast.error(e.message),
-  });
-
-  const canSubmit = Boolean(exchangeName.trim() && fileName.trim());
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
-          <>
-            <DialogHeader>
-              <DialogTitle>Add supported file</DialogTitle>
-              <DialogDescription>
-                Add a file type for an exchange. You can attach a sample reference file now and complete verification from the tracker when ready.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label>Exchange</Label>
-                <Input list="sf-exchanges" value={exchangeName} onChange={(e) => setExchangeName(e.target.value)} required />
-                <datalist id="sf-exchanges">
-                  {exchanges.data?.exchanges.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
-              </div>
-              <div className="space-y-1">
-                <Label>Supported file type</Label>
-                <Input placeholder="Trade History" value={fileName} onChange={(e) => setFileName(e.target.value)} required />
-              </div>
-              <div className="space-y-1">
-                <Label>Sample / reference file (optional)</Label>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => addFileRef.current?.click()}>
-                    Choose file
-                  </Button>
-                  {pendingFile ? (
-                    <span className="min-w-0 truncate text-sm text-foreground" title={pendingFile.name}>
-                      {pendingFile.name}
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">No file selected</span>
-                  )}
-                  {pendingFile ? (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setPendingFile(null)}>
-                      Remove
-                    </Button>
-                  ) : null}
-                </div>
-                <input
-                  ref={addFileRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    setPendingFile(file ?? null);
-                    e.target.value = "";
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Updated reason (optional)</Label>
-                <Textarea rows={2} value={updatedReason} onChange={(e) => setUpdatedReason(e.target.value)} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="button" disabled={!canSubmit || create.isPending} onClick={() => create.mutate()}>
-                Create
-              </Button>
-            </DialogFooter>
-          </>
-      </DialogContent>
-    </Dialog>
   );
 }
 

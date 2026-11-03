@@ -111,7 +111,15 @@ const groups: NavGroup[] = [
         to: "/integration-steps/dashboard",
         label: "Integration Steps",
         icon: Plug,
-        any: ["integration.dashboard", "integration.tracker", "integration.library", "integration.tech", "integration.view"],
+        any: [
+          "integration.dashboard",
+          "integration.tracker",
+          "integration.library",
+          "integration.tech",
+          "integration.view",
+          "integration.manage",
+          "integration.review",
+        ],
       },
       { to: "/supported-files/dashboard", label: "Supported Files", icon: Files, any: ["supported_files.dashboard", "supported_files.tracker"] },
       { to: "/token-migration/dashboard", label: "Token Migration", icon: LayoutDashboard, any: ["token_migration.dashboard", "token_migration.tracker"] },
@@ -250,7 +258,7 @@ function AccountMenu() {
           <KeyRound />
           Change password
         </DropdownMenuItem>
-        {can("users.manage", "users.view") ? (
+        {can("users.manage") ? (
           <DropdownMenuItem onClick={() => navigate("/admin/people")}>
             <Users />
             User management

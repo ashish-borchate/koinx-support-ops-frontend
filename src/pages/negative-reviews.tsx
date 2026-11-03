@@ -175,6 +175,11 @@ type DsatDailyCheckRow = {
 };
 
 export function NrDailyDsatPage() {
+  const { effective } = useAuth();
+  const allowed =
+    effective?.roleKey === "senior_agent" || effective?.roleKey === "admin";
+  if (!allowed) return <Navigate to="/" replace />;
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();

@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview",
-    "test": "tsx src/handbook/lib/visibility.test.ts && tsx src/handbook/lib/role-workflows.test.ts && tsx src/handbook/lib/search-index.test.ts && tsx src/handbook/lib/learning-catalog.test.ts"
+    "test": "tsx src/lib/supported-file-attachment.test.ts && tsx src/handbook/lib/visibility.test.ts && tsx src/handbook/lib/role-workflows.test.ts && tsx src/handbook/lib/search-index.test.ts && tsx src/handbook/lib/learning-catalog.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

@@ -1,36 +1,21 @@
-/** Mirrors server `supported-files/service.ts` attachment rules (default 12 MB). */
+/** Mirrors server `supported-files/attachment-validation.ts` (default 12 MB). */
 export const SUPPORTED_FILE_MAX_BYTES = 12 * 1024 * 1024;
 
 export const SUPPORTED_FILE_ACCEPT =
-  "text/csv,application/csv,text/plain,application/pdf,image/png,image/jpeg,image/gif,image/webp,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  "text/csv,application/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,.xls,.xlsx";
+
+export const SUPPORTED_FILE_FORMAT_HINT = "CSV or Excel (.csv, .xls, .xlsx)";
 
 const ALLOWED_TYPES = new Set([
   "text/csv",
   "application/csv",
-  "text/plain",
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
 function extensionAllowed(name: string) {
   const lower = name.toLowerCase();
-  return (
-    lower.endsWith(".csv") ||
-    lower.endsWith(".pdf") ||
-    lower.endsWith(".txt") ||
-    lower.endsWith(".png") ||
-    lower.endsWith(".jpg") ||
-    lower.endsWith(".jpeg") ||
-    lower.endsWith(".gif") ||
-    lower.endsWith(".webp") ||
-    lower.endsWith(".xls") ||
-    lower.endsWith(".xlsx")
-  );
+  return lower.endsWith(".csv") || lower.endsWith(".xls") || lower.endsWith(".xlsx");
 }
 
 export function validateSupportedReferenceFile(file: File): string | null {
@@ -39,7 +24,9 @@ export function validateSupportedReferenceFile(file: File): string | null {
   }
   const contentType = (file.type || "").split(";")[0].trim().toLowerCase();
   if (contentType && ALLOWED_TYPES.has(contentType)) return null;
-  if (!contentType && extensionAllowed(file.name)) return null;
+  if (!contentType || contentType === "application/octet-stream") {
+    if (extensionAllowed(file.name)) return null;
+  }
   if (extensionAllowed(file.name)) return null;
-  return "File type not allowed. Use CSV, PDF, Excel, images, or plain text.";
+  return `File type not allowed. Use ${SUPPORTED_FILE_FORMAT_HINT}.`;
 }

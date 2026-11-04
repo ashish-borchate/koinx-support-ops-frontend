@@ -26,6 +26,10 @@ import { moduleIndexSegment } from "@/lib/module-nav";
 import { TruncatedHoverField } from "@/components/truncated-hover-field";
 import { AddSupportedFileDialog } from "@/components/supported-file-add-dialog";
 import { fileToUploadPayload } from "@/lib/issue-attachments";
+import {
+  SUPPORTED_FILE_ACCEPT,
+  validateSupportedReferenceFile,
+} from "@/lib/supported-file-attachment";
 import { cn } from "@/lib/utils";
 
 type SupportedFileRow = {
@@ -290,10 +294,12 @@ export function SupportedFilesTrackerPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">Supported file types grouped by exchange. Select a file type for verification details.</p>
+        <p className="text-sm text-muted-foreground">
+          Supported files grouped by exchange. Open a file to review verification for that format only.
+        </p>
         {canMutate("supported_files.manage") ? (
           <Button type="button" onClick={() => setAddOpen(true)}>
-            + Add Supported File
+            + Add supported files
           </Button>
         ) : null}
       </div>
@@ -421,7 +427,7 @@ export function SupportedFilesTrackerPage() {
           <Empty title="No supported files yet." body="Add a supported file to start building the exchange file library." />
           {canMutate("supported_files.manage") ? (
             <Button type="button" onClick={() => setAddOpen(true)}>
-              + Add Supported File
+              + Add supported files
             </Button>
           ) : null}
         </div>
@@ -431,7 +437,7 @@ export function SupportedFilesTrackerPage() {
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <div className="hidden border-b border-border bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[minmax(140px,220px)_1fr_120px] sm:gap-4">
             <span>Exchange</span>
-            <span>Supported file types</span>
+            <span>Supported files</span>
             <span className="text-right">Review</span>
           </div>
           <ul className="divide-y divide-border/60">
@@ -445,7 +451,7 @@ export function SupportedFilesTrackerPage() {
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{group.exchangeName}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">
-                      {group.files.length} file type{group.files.length === 1 ? "" : "s"}
+                      {group.files.length} file{group.files.length === 1 ? "" : "s"}
                     </p>
                   </div>
                   <div className="flex min-w-0 flex-wrap gap-1.5">
@@ -654,13 +660,16 @@ function SupportedFileDetailDialog({
   }
 
   const upload = useMutation({
-    mutationFn: (file: File) =>
-      fileToUploadPayload(file).then((payload) =>
+    mutationFn: (file: File) => {
+      const message = validateSupportedReferenceFile(file);
+      if (message) return Promise.reject(new Error(message));
+      return fileToUploadPayload(file).then((payload) =>
         api(`/api/supported-files/${id}/attachment${replaceMode ? "?replace=1" : ""}`, {
           method: "POST",
           body: JSON.stringify(payload),
         }),
-      ),
+      );
+    },
     onSuccess: () => {
       toast.success(replaceMode ? "File replaced" : "File attached");
       setReplaceMode(false);
@@ -723,12 +732,15 @@ function SupportedFileDetailDialog({
             <>
               <div className="border-b border-border px-6 py-5">
                 <DialogHeader className="text-left">
-                  <DialogTitle className="text-xl tracking-tight">{item.exchangeName}</DialogTitle>
-                  <DialogDescription className="mt-1">{item.fileName}</DialogDescription>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{item.exchangeName}</p>
+                  <DialogTitle className="text-xl tracking-tight">{item.fileName}</DialogTitle>
+                  <DialogDescription className="mt-1 text-pretty">
+                    Verification applies to this supported file only—not every file on {item.exchangeName}.
+                  </DialogDescription>
                 </DialogHeader>
                 {exchangeFiles && exchangeFiles.length > 1 ? (
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-muted-foreground">Supported file types</p>
+                    <p className="text-xs font-medium text-muted-foreground">Other supported files on this exchange</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {exchangeFiles.map((row) => (
                         <FileTypeChip
@@ -902,6 +914,7 @@ function SupportedFileDetailDialog({
                     <input
                       ref={fileRef}
                       type="file"
+                      accept={SUPPORTED_FILE_ACCEPT}
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -920,7 +933,7 @@ function SupportedFileDetailDialog({
                           <Input value={editExchange} onChange={(e) => setEditExchange(e.target.value)} />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className={sfFieldLabel}>File name</Label>
+                          <Label className={sfFieldLabel}>Supported file name</Label>
                           <Input value={editFileName} onChange={(e) => setEditFileName(e.target.value)} />
                         </div>
                         {item.verificationStatus === "Verified" ? (

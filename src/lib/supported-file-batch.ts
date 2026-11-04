@@ -7,6 +7,32 @@ export type SupportedFileDraftEntry = {
   createdId?: string;
 };
 
+/** Matches server batch policy (one exchange, up to 5 files, 20 MB decoded total). */
+export const SUPPORTED_FILE_BATCH_MAX_FILES = 5;
+export const SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+
+export function sumPendingReferenceBytes(entries: SupportedFileDraftEntry[]) {
+  return entries
+    .filter((e) => !e.createdId && e.referenceFile)
+    .reduce((sum, e) => sum + (e.referenceFile?.size ?? 0), 0);
+}
+
+export function countPendingDraftEntries(entries: SupportedFileDraftEntry[]) {
+  return entries.filter((e) => !e.createdId).length;
+}
+
+export function validateBatchExchangeUploadLimits(entries: SupportedFileDraftEntry[]): string | null {
+  const pendingCount = countPendingDraftEntries(entries);
+  if (pendingCount > SUPPORTED_FILE_BATCH_MAX_FILES) {
+    return `You can upload at most ${SUPPORTED_FILE_BATCH_MAX_FILES} files per exchange.`;
+  }
+  const totalBytes = sumPendingReferenceBytes(entries);
+  if (totalBytes > SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES) {
+    return `Total reference file size exceeds ${Math.round(SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES / (1024 * 1024))} MB for one exchange upload.`;
+  }
+  return null;
+}
+
 export function normalizeSupportedFileNameKey(name: string) {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -27,6 +53,7 @@ export function findDuplicateDraftFileName(entries: SupportedFileDraftEntry[]) {
 
 export type DraftValidationResult = {
   exchangeError: string | null;
+  batchError: string | null;
   entryErrors: Record<string, { fileName?: string; reference?: string }>;
   firstInvalidEntryId: string | null;
 };
@@ -41,6 +68,7 @@ export function validateSupportedFileDrafts(
   let firstInvalidEntryId: string | null = null;
 
   const exchangeError = exchangeName.trim() ? null : "Exchange is required.";
+  const batchError = validateBatchExchangeUploadLimits(entries);
 
   const pending = entries.filter((e) => !e.createdId);
   const duplicate = findDuplicateDraftFileName(entries);
@@ -77,7 +105,7 @@ export function validateSupportedFileDrafts(
     firstInvalidEntryId = pending[0].id;
   }
 
-  return { exchangeError, entryErrors, firstInvalidEntryId };
+  return { exchangeError, batchError, entryErrors, firstInvalidEntryId };
 }
 
 export type BatchApiResultItem = {

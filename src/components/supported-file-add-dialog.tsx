@@ -25,7 +25,11 @@ import {
 import {
   applyBatchResultsToDrafts,
   formatBatchEntryFailureMessage,
+  SUPPORTED_FILE_BATCH_MAX_FILES,
+  SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES,
+  countPendingDraftEntries,
   summarizeBatchResults,
+  validateBatchExchangeUploadLimits,
   validateSupportedFileDrafts,
   type BatchApiResultItem,
   type SupportedFileDraftEntry,
@@ -303,6 +307,7 @@ export function AddSupportedFileDialog({
   }
 
   function addEntry() {
+    if (countPendingDraftEntries(entries) >= SUPPORTED_FILE_BATCH_MAX_FILES) return;
     const entry = newDraftEntry();
     setEntries((prev) => [...prev, entry]);
     setActiveId(entry.id);
@@ -338,6 +343,8 @@ export function AddSupportedFileDialog({
   const createBatch = useMutation({
     mutationFn: async () => {
       setBatchMessage(null);
+      const limitError = validateBatchExchangeUploadLimits(entries);
+      if (limitError) throw new Error(limitError);
       const pending = entries.filter((e) => !e.createdId);
       const payload = {
         exchangeName: exchangeName.trim(),
@@ -415,8 +422,9 @@ export function AddSupportedFileDialog({
   function submit() {
     setSubmitAttempted(true);
     const v = validateSupportedFileDrafts(exchangeName, entries);
-    if (v.exchangeError || v.firstInvalidEntryId) {
-      if (v.firstInvalidEntryId) setActiveId(v.firstInvalidEntryId);
+    if (v.exchangeError || v.batchError) return;
+    if (v.firstInvalidEntryId) {
+      setActiveId(v.firstInvalidEntryId);
       return;
     }
     if (pendingCount === 0) {
@@ -446,6 +454,8 @@ export function AddSupportedFileDialog({
   }, [open, entries, activeId]);
 
   const exchangeInvalid = submitAttempted && Boolean(validation.exchangeError);
+  const batchInvalid = submitAttempted && Boolean(validation.batchError);
+  const pendingDraftCount = countPendingDraftEntries(entries);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -453,8 +463,7 @@ export function AddSupportedFileDialog({
         <DialogHeader className="shrink-0 space-y-1 border-b border-border/60 px-5 py-4 text-left">
           <DialogTitle>Add supported files</DialogTitle>
           <DialogDescription className="text-pretty text-sm leading-snug">
-            Add an exchange and attach a reference file for each supported file format. You can review and verify each file
-            separately.
+            Add one exchange and up to {SUPPORTED_FILE_BATCH_MAX_FILES} reference files ({Math.round(SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES / (1024 * 1024))} MB total per upload). Review and verify each file separately.
           </DialogDescription>
         </DialogHeader>
 
@@ -468,6 +477,7 @@ export function AddSupportedFileDialog({
             existingMatch={existingExchangeMatch}
           />
           {exchangeInvalid ? <p className="mt-1 text-xs text-destructive">{validation.exchangeError}</p> : null}
+          {batchInvalid ? <p className="mt-1 text-xs text-destructive">{validation.batchError}</p> : null}
 
           <div className="mt-5 space-y-3">
             <div
@@ -532,7 +542,7 @@ export function AddSupportedFileDialog({
                 type="button"
                 role="tab"
                 aria-label="Add another file"
-                disabled={createBatch.isPending || entries.length >= 25}
+                disabled={createBatch.isPending || pendingDraftCount >= SUPPORTED_FILE_BATCH_MAX_FILES}
                 className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={addEntry}
               >

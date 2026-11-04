@@ -4,6 +4,9 @@ import {
   applyBatchResultsToDrafts,
   findDuplicateDraftFileName,
   normalizeSupportedFileNameKey,
+  SUPPORTED_FILE_BATCH_MAX_FILES,
+  SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES,
+  validateBatchExchangeUploadLimits,
   validateSupportedFileDrafts,
   type SupportedFileDraftEntry,
 } from "./supported-file-batch.ts";
@@ -45,7 +48,23 @@ assert.ok(findDuplicateDraftFileName([e1, e2]));
 
 const validation = validateSupportedFileDrafts("Binance", [e1]);
 assert.equal(validation.exchangeError, null);
+assert.equal(validation.batchError, null);
 assert.equal(validation.firstInvalidEntryId, null);
+
+const sixPending = Array.from({ length: 6 }, (_, i) => ({
+  ...e1,
+  id: `p${i}`,
+  fileName: `File ${i}`,
+}));
+assert.match(validateBatchExchangeUploadLimits(sixPending) ?? "", /5 files/);
+
+const heavy = [
+  { ...e1, id: "h1", referenceFile: new File([new Uint8Array(11 * 1024 * 1024)], "a.csv", { type: "text/csv" }) },
+  { ...e1, id: "h2", referenceFile: new File([new Uint8Array(10 * 1024 * 1024)], "b.csv", { type: "text/csv" }) },
+];
+assert.match(validateBatchExchangeUploadLimits(heavy) ?? "", /20 MB/);
+assert.equal(SUPPORTED_FILE_BATCH_MAX_FILES, 5);
+assert.equal(SUPPORTED_FILE_BATCH_MAX_TOTAL_BYTES, 20 * 1024 * 1024);
 
 const missingRef: SupportedFileDraftEntry = { ...e1, id: "c", referenceFile: null };
 const v2 = validateSupportedFileDrafts("Binance", [missingRef]);

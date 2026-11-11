@@ -5,10 +5,11 @@ export const EXCLUDED_LIVE_GROUP_NAMES = ["voice call support"];
 const LIVE_GROUP_ORDER_PATTERNS: RegExp[] = [
   /^general support$/i,
   /^escalation team$/i,
-  /tech.*issue/i,
+  /^tech (issues?|team)$/i,
   /^refund requests?$/i,
   /^ca tax report issues$/i,
-  /followup.*ca tax/i,
+  /follow[- ]?up.*ca tax/i,
+  /^agent offline/i,
 ];
 
 export function rankLiveGroup(name: string): number {

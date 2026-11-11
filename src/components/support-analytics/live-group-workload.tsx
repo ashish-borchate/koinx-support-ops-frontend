@@ -85,15 +85,25 @@ export function SupportAnalyticsLiveGroupWorkload({
             <p className="text-sm text-muted-foreground">No Freshdesk groups in the Live store yet.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border bg-card">
-              <table className="min-w-[40rem] w-full text-sm">
+              <table className="w-full max-w-4xl table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[36%]" />
+                  <col className="w-[12.8%]" />
+                  <col className="w-[12.8%]" />
+                  <col className="w-[12.8%]" />
+                  <col className="w-[12.8%]" />
+                  <col className="w-[12.8%]" />
+                </colgroup>
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Group</th>
-                    <th className="px-2 py-2 font-medium text-right">Backlog</th>
-                    <th className="px-2 py-2 font-medium text-right">Open</th>
-                    <th className="px-2 py-2 font-medium text-right">Pending</th>
-                    <th className="px-2 py-2 font-medium text-right">Waiting on Customer</th>
-                    <th className="px-2 py-2 font-medium text-right">Overdue</th>
+                    <th className="px-1 py-2 text-right font-medium">Backlog</th>
+                    <th className="px-1 py-2 text-right font-medium">Open</th>
+                    <th className="px-1 py-2 text-right font-medium">Pending</th>
+                    <th className="px-1 py-2 text-right font-medium leading-tight">
+                      <span className="block whitespace-normal">Waiting on Customer</span>
+                    </th>
+                    <th className="px-1 py-2 text-right font-medium">Overdue</th>
                   </tr>
                 </thead>
                 <tbody>

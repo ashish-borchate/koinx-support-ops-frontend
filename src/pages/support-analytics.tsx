@@ -12,6 +12,7 @@ import { STALE } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
+import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytics/live-agent-workload";
 import { SupportAnalyticsLiveGroupWorkload } from "@/components/support-analytics/live-group-workload";
 import { LIVE_WORKLOAD_EXPLORER_NOTES } from "@/components/support-analytics/live-workload-shared";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
@@ -109,10 +110,11 @@ function definitionFromApi(
 ): LiveMetricDefinition {
   const row = definitions.find((d) => d.id === id);
   if (!row) return fallback;
+  const description = row.description?.trim() ? row.description : fallback.description;
   return {
-    label: row.label,
-    description: row.description,
-    kind: row.kind,
+    label: row.label?.trim() ? row.label : fallback.label,
+    description,
+    kind: row.kind?.trim() ? row.kind : fallback.kind,
     notes: fallback.notes ?? row.notes,
   };
 }
@@ -446,6 +448,8 @@ export function SupportAnalyticsPage() {
               </section>
 
               <SupportAnalyticsLiveGroupWorkload onExplore={setExplorerRequest} />
+
+              <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
 
               <section className="space-y-3 rounded-xl border border-border bg-card/40 p-3 sm:p-4">
                 <SectionHeader title="Selected Period Data — Not Live" />

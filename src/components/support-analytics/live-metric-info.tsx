@@ -34,7 +34,12 @@ export function LiveMetricInfoButton({
           <Info className="h-3.5 w-3.5" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[250] max-w-sm space-y-2 text-xs leading-relaxed">
+      <PopoverContent
+        align="end"
+        side="bottom"
+        className="z-[400] max-w-sm space-y-2 text-xs leading-relaxed"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <p className="font-medium text-foreground">
           {definition.label}
           {definition.kind ? (

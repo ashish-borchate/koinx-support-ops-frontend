@@ -271,13 +271,26 @@ export function SupportAnalyticsTicketExplorerModal({
                       <th className="px-2 py-2">Status</th>
                       <th className="px-2 py-2">Created</th>
                       <th className="px-2 py-2">Resolved</th>
-                      <th className="px-2 py-2" />
+                      <th className="px-2 py-2 text-right">Freshdesk</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageRows.map((t) => (
                       <tr key={t.freshdeskId} className="border-b border-border/60">
-                        <td className="px-2 py-2 font-medium tabular-nums">#{ticketLabel(t)}</td>
+                        <td className="px-2 py-2 font-medium tabular-nums">
+                          {t.url ? (
+                            <a
+                              href={t.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              #{ticketLabel(t)}
+                            </a>
+                          ) : (
+                            `#${ticketLabel(t)}`
+                          )}
+                        </td>
                         <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
                           {t.subject || "—"}
                         </td>

@@ -358,47 +358,71 @@ export function SupportAnalyticsTicketExplorerModal({
               </Button>
             </div>
 
-            <div className="isolate min-h-0 flex-1 overflow-y-auto bg-background px-4 py-2">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
               {ticketsQuery.isLoading ? <LoadingBlock label="Loading tickets…" /> : null}
               {ticketsQuery.isError ? <ErrorBlock message="Could not load tickets." /> : null}
               {!ticketsQuery.isLoading && !ticketsQuery.isError && filtered.length === 0 ? (
-                <Empty title="No tickets" body="Nothing matches this filter." />
+                <div className="px-4 py-2">
+                  <Empty title="No tickets" body="Nothing matches this filter." />
+                </div>
               ) : null}
               {pageRows.length > 0 ? (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-muted-foreground">
-                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Ticket No</th>
-                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Subject</th>
-                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Assignee</th>
-                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Status</th>
-                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Created</th>
-                      {showResolvedColumn ? (
-                        <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Resolved</th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageRows.map((t) => (
-                      <tr key={t.freshdeskId} className="border-b border-border/60">
-                        <td className="px-2 py-2">
-                          <TicketNoCell ticket={t} />
-                        </td>
-                        <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
-                          {t.subject || "—"}
-                        </td>
-                        <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
-                        <td className="px-2 py-2">{t.statusLabel}</td>
-                        <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
-                        {showResolvedColumn ? (
-                          <td className="whitespace-nowrap px-2 py-2 text-xs">
-                            {t.resolvedAt ? formatWhen(t.resolvedAt) : "—"}
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <>
+                  <div className="shrink-0 border-b border-border bg-background px-4">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col className="w-[5.25rem]" />
+                        <col />
+                        <col className="w-[6.5rem]" />
+                        <col className="w-[6.75rem]" />
+                        <col className="w-[8.25rem]" />
+                        {showResolvedColumn ? <col className="w-[8.25rem]" /> : null}
+                      </colgroup>
+                      <thead>
+                        <tr className="text-left text-xs text-muted-foreground">
+                          <th className="px-2 py-2 font-medium">Ticket No</th>
+                          <th className="px-2 py-2 font-medium">Subject</th>
+                          <th className="px-2 py-2 font-medium">Assignee</th>
+                          <th className="px-2 py-2 font-medium">Status</th>
+                          <th className="px-2 py-2 font-medium">Created</th>
+                          {showResolvedColumn ? <th className="px-2 py-2 font-medium">Resolved</th> : null}
+                        </tr>
+                      </thead>
+                    </table>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4">
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col className="w-[5.25rem]" />
+                        <col />
+                        <col className="w-[6.5rem]" />
+                        <col className="w-[6.75rem]" />
+                        <col className="w-[8.25rem]" />
+                        {showResolvedColumn ? <col className="w-[8.25rem]" /> : null}
+                      </colgroup>
+                      <tbody>
+                        {pageRows.map((t) => (
+                          <tr key={t.freshdeskId} className="border-b border-border/60">
+                            <td className="px-2 py-2">
+                              <TicketNoCell ticket={t} />
+                            </td>
+                            <td className="truncate px-2 py-2" title={t.subject ?? undefined}>
+                              {t.subject || "—"}
+                            </td>
+                            <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
+                            <td className="px-2 py-2">{t.statusLabel}</td>
+                            <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
+                            {showResolvedColumn ? (
+                              <td className="whitespace-nowrap px-2 py-2 text-xs">
+                                {t.resolvedAt ? formatWhen(t.resolvedAt) : "—"}
+                              </td>
+                            ) : null}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : null}
             </div>
 

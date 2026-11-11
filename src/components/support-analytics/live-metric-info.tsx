@@ -34,11 +34,13 @@ export function LiveMetricInfoButton({
           <Info className="h-3.5 w-3.5" aria-hidden />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="max-w-xs space-y-2 text-xs leading-relaxed">
-        <p className="font-medium text-foreground">{definition.label}</p>
-        {definition.kind ? (
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{definition.kind}</p>
-        ) : null}
+      <PopoverContent align="start" className="z-[250] max-w-sm space-y-2 text-xs leading-relaxed">
+        <p className="font-medium text-foreground">
+          {definition.label}
+          {definition.kind ? (
+            <span className="font-normal text-muted-foreground"> ({definition.kind})</span>
+          ) : null}
+        </p>
         <p className="text-muted-foreground">{definition.description}</p>
         {definition.notes ? (
           <p className="border-t border-border pt-2 text-muted-foreground">{definition.notes}</p>

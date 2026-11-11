@@ -1,4 +1,4 @@
-export type DatePresetId = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom";
+export type DatePresetId = "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
@@ -26,10 +26,13 @@ export function resolveDatePreset(preset: DatePresetId, now = new Date()): { fro
       const y = addDaysIst(today, -1);
       return { from: y, to: y };
     }
-    case "last7":
-      return { from: addDaysIst(today, -6), to: today };
-    case "last30":
-      return { from: addDaysIst(today, -29), to: today };
+    case "thisWeek": {
+      const [y, m, d] = today.split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      const dow = dt.getUTCDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      return { from: addDaysIst(today, mondayOffset), to: today };
+    }
     case "thisMonth": {
       const [y, m] = today.split("-");
       return { from: `${y}-${m}-01`, to: today };

@@ -104,7 +104,7 @@ export function SupportAnalyticsHistoricalPanel() {
   } | null>(null);
   const [importFrom, setImportFrom] = useState("");
   const [importTo, setImportTo] = useState("");
-  const [preset, setPreset] = useState<DatePresetId>("last30");
+  const [preset, setPreset] = useState<DatePresetId>("thisWeek");
   const [showCustomRange, setShowCustomRange] = useState(false);
   const [manageDataOpen, setManageDataOpen] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
@@ -325,8 +325,13 @@ export function SupportAnalyticsHistoricalPanel() {
 
       <section className="rounded-lg border border-border bg-card px-3 py-3">
         <SectionHeader className="mb-2" title="Reporting period" />
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <PresetGroup preset={preset} onSelect={selectPreset} />
+          {appliedFrom && appliedTo ? (
+            <span className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium tabular-nums text-foreground">
+              {formatCalendarDate(appliedFrom)} – {formatCalendarDate(appliedTo)} (IST)
+            </span>
+          ) : null}
           {showCustomRange || preset === "custom" ? (
             <DateRangeControls
               draftFrom={draftFrom}
@@ -340,11 +345,6 @@ export function SupportAnalyticsHistoricalPanel() {
             />
           ) : null}
         </div>
-        {appliedFrom && appliedTo ? (
-          <p className="mt-3 text-sm font-medium tabular-nums">
-            Showing {formatCalendarDate(appliedFrom)} – {formatCalendarDate(appliedTo)} (IST)
-          </p>
-        ) : null}
       </section>
 
       {data?.coverage ? (
@@ -471,8 +471,7 @@ export function SupportAnalyticsHistoricalPanel() {
 const PRESETS: { id: DatePresetId; label: string }[] = [
   { id: "today", label: "Today" },
   { id: "yesterday", label: "Yesterday" },
-  { id: "last7", label: "Last 7 days" },
-  { id: "last30", label: "Last 30 days" },
+  { id: "thisWeek", label: "This week" },
   { id: "thisMonth", label: "This month" },
   { id: "custom", label: "Custom" },
 ];

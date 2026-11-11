@@ -32,31 +32,6 @@ type LiveAgentWorkload = {
 
 type AgentMetricTab = "open" | "waiting" | "overdue" | "high_urgent" | "pending" | "assigned_to_ai";
 
-function metricButton(
-  label: string,
-  value: number,
-  onClick: () => void,
-  tone?: "default" | "warn",
-) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={value === 0}
-      className="min-h-[4.5rem] rounded-xl border border-border bg-card px-3 py-2.5 text-left transition hover:border-primary/40 disabled:cursor-default disabled:opacity-60"
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p
-        className={`mt-1.5 text-2xl font-semibold tabular-nums leading-none ${
-          tone === "warn" ? "text-amber-700 dark:text-amber-400" : "text-foreground"
-        }`}
-      >
-        {formatNumber(value)}
-      </p>
-    </button>
-  );
-}
-
 function agentFilterTabs(agent: LiveAgentRow): TicketExplorerFilterTab[] {
   const responder = agent.agentFreshdeskId == null ? "0" : String(agent.agentFreshdeskId);
   const base = { responderFreshdeskId: responder, limit: "500" };
@@ -141,20 +116,6 @@ export function SupportAnalyticsLiveAgentWorkload({
   const data = workload.data;
   const maxBacklog = Math.max(1, ...(data?.agents.map((a) => a.backlog) ?? [1]));
 
-  function liveReq(
-    title: string,
-    kind: string,
-    extra: Record<string, string> = {},
-  ): SupportAnalyticsTicketExplorerRequest {
-    return {
-      source: "live",
-      title,
-      subtitle: "Latest Live sync snapshot",
-      exportFileName: `live-${kind}.csv`,
-      queryParams: { kind, limit: "500", ...extra },
-    };
-  }
-
   function openAgentExplorer(agent: LiveAgentRow, initialMetric: AgentMetricTab) {
     const tabs = agentFilterTabs(agent);
     const initialTabKey = agentMetricTabKey(initialMetric);
@@ -171,37 +132,13 @@ export function SupportAnalyticsLiveAgentWorkload({
 
   return (
     <section className="space-y-3">
-      <SectionHeader title="Current agent workload" />
+      <SectionHeader title="Current Agent Workload" />
 
       {workload.isLoading ? <LoadingBlock label="Loading agent workload…" /> : null}
       {workload.isError ? <ErrorBlock message="Could not load live agent workload." /> : null}
 
       {data ? (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            {metricButton("Total backlog", data.totals.backlog, () =>
-              onExplore(liveReq("Total backlog", "backlog")),
-            )}
-            {metricButton("Open", data.totals.statusOpen, () => onExplore(liveReq("Open", "open")))}
-            {metricButton("Waiting", data.totals.waitingOnCustomer, () =>
-              onExplore(liveReq("Waiting on customer", "waiting")),
-            )}
-            {metricButton(
-              "Overdue",
-              data.totals.overdueResolution,
-              () => onExplore(liveReq("Overdue (resolution)", "overdue_resolution")),
-              "warn",
-            )}
-            {metricButton(
-              "Unassigned",
-              data.totals.unassignedBacklog,
-              () => onExplore(liveReq("Unassigned backlog", "unassigned")),
-            )}
-            {metricButton("High / urgent", data.totals.highUrgentPriority, () =>
-              onExplore(liveReq("High / urgent priority", "high_urgent")),
-            )}
-          </div>
-
           {data.agents.length === 0 ? (
             <p className="text-sm text-muted-foreground">No assigned backlog tickets in the Live store.</p>
           ) : (

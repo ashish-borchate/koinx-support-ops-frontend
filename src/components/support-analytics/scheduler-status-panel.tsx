@@ -44,20 +44,17 @@ function scheduledAttemptLabel(status?: string | null) {
   }
 }
 
-/** Expandable sync history (header toggle); no status strip on the main Live view. */
+/** Sync history body (shown in header popover). */
 export function SupportAnalyticsSchedulerStatusPanel({
   display,
   inOperationalWindow,
   ticketsStored,
-  detailsOpen = false,
 }: {
   display?: FreshnessDisplay | null;
   inOperationalWindow?: boolean;
   ticketsStored?: number;
-  detailsOpen?: boolean;
-  hideDetailsToggle?: boolean;
 }) {
-  if (!display || !detailsOpen) return null;
+  if (!display) return null;
 
   const inWindow = Boolean(inOperationalWindow);
   buildSchedulerAttention({
@@ -77,7 +74,7 @@ export function SupportAnalyticsSchedulerStatusPanel({
       : "Not recorded";
 
   return (
-    <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2.5">
+    <div className="px-1 py-1">
       <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
         <SyncDetailRow label="Last successful sync">
           {display.lastSuccessfulSyncLabelIst || "—"}

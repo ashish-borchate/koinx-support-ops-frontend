@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBlock, LoadingBlock, PageHeader, SectionHeader } from "@/components/bits";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { formatCalendarDate } from "@/lib/format";
@@ -253,7 +254,7 @@ export function SupportAnalyticsPage() {
       ? syncRun.error.message
       : "Freshdesk sync failed.";
 
-  const showSyncDetails = mainTab === "live" && Boolean(freshness?.display);
+  const showSyncHistory = mainTab === "live" && Boolean(freshness?.display);
 
   return (
     <div className="space-y-5 pb-10">
@@ -262,31 +263,45 @@ export function SupportAnalyticsPage() {
         title="Support Analytics"
         description="Freshdesk ticket operations — separate from official KPI Performance scoring."
         action={
-          canSync || showSyncDetails ? (
+          (canSync && mainTab === "live") || showSyncHistory ? (
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {canSync ? (
+              {canSync && mainTab === "live" ? (
                 <Button
                   variant="default"
                   size="sm"
-                  className="h-9 px-4"
+                  className="h-9 min-w-[8.5rem] px-4"
                   disabled={syncRun.isPending}
                   onClick={() => syncRun.mutate()}
                 >
                   {syncRun.isPending ? "Syncing…" : "Sync Freshdesk"}
                 </Button>
               ) : null}
-              {showSyncDetails ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-1.5 px-4"
-                  aria-expanded={syncDetailsOpen}
-                  onClick={() => setSyncDetailsOpen((v) => !v)}
-                >
-                  Sync History
-                  {syncDetailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                </Button>
+              {showSyncHistory ? (
+                <Popover open={syncDetailsOpen} onOpenChange={setSyncDetailsOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5 px-4"
+                      aria-expanded={syncDetailsOpen}
+                    >
+                      Sync History
+                      {syncDetailsOpen ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="z-[200] w-[min(22rem,calc(100vw-2rem))] p-3">
+                    <SupportAnalyticsSchedulerStatusPanel
+                      display={freshness!.display}
+                      inOperationalWindow={freshness!.schedule?.inQuietHours === false}
+                      ticketsStored={freshness!.ticketsStored}
+                    />
+                  </PopoverContent>
+                </Popover>
               ) : null}
             </div>
           ) : null
@@ -297,8 +312,8 @@ export function SupportAnalyticsPage() {
         <nav className="flex flex-wrap gap-1.5 border-b border-border pb-2" aria-label="Analytics mode">
           {(
             [
-              { id: "live" as const, label: "Live sync" },
-              { id: "historical" as const, label: "Historical analysis" },
+              { id: "live" as const, label: "Live Sync" },
+              { id: "historical" as const, label: "Historical Analysis" },
             ] as const
           ).map((mode) => (
             <button
@@ -330,35 +345,118 @@ export function SupportAnalyticsPage() {
             </div>
           ) : null}
 
-          {freshness?.display ? (
-            <SupportAnalyticsSchedulerStatusPanel
-              display={freshness.display}
-              inOperationalWindow={freshness.schedule?.inQuietHours === false}
-              ticketsStored={freshness.ticketsStored}
-              detailsOpen={syncDetailsOpen}
-              hideDetailsToggle
-            />
-          ) : null}
-
-          <LiveReportingToolbar
-            draftFrom={draftFrom}
-            draftTo={draftTo}
-            onDraftFrom={setDraftFrom}
-            onDraftTo={setDraftTo}
-            onApply={applyDateRange}
-            appliedFrom={appliedFrom}
-            appliedTo={appliedTo}
-            rangeSource={data?.range.source}
-            definitions={definitions}
-          />
-
           {overview.isLoading ? <LoadingBlock label="Loading analytics…" /> : null}
           {overview.isError ? <ErrorBlock message={overviewErrorMessage} /> : null}
 
           {data ? (
             <>
               <section className="space-y-3">
-                <SectionHeader title="Selected-period activity" />
+                <SectionHeader title="Live Operation Dashboard" />
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  <LiveBacklogMetricCard
+                    label="Total backlog"
+                    value={data.snapshot.metrics.backlogOpen}
+                    definition={definitionFromApi(definitions, "backlog_open", {
+                      label: "Total backlog",
+                      kind: "snapshot",
+                      description: "Unresolved workload statuses in the Live store.",
+                    })}
+                    onDrill={() => openLiveTickets("Total backlog", "backlog")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Unassigned backlog"
+                    value={data.snapshot.metrics.unassigned}
+                    definition={definitionFromApi(definitions, "unassigned", {
+                      label: "Unassigned",
+                      kind: "snapshot",
+                      description: "Backlog tickets with no responder_id at last sync.",
+                    })}
+                    onDrill={() => openLiveTickets("Unassigned backlog", "unassigned")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Open"
+                    value={data.snapshot.metrics.statusOpen}
+                    definition={definitionFromApi(definitions, "status_open", SNAPSHOT_FALLBACKS.status_open)}
+                    onDrill={() => openLiveTickets("Open", "open")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Waiting on customer"
+                    value={data.snapshot.metrics.waitingOnCustomer}
+                    definition={definitionFromApi(definitions, "waiting", SNAPSHOT_FALLBACKS.waiting)}
+                    onDrill={() => openLiveTickets("Waiting on customer", "waiting")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Pending"
+                    value={data.snapshot.metrics.pending}
+                    definition={definitionFromApi(definitions, "pending_count", {
+                      label: "Pending",
+                      kind: "snapshot",
+                      description: "Tickets in Freshdesk status Pending (3) among synced backlog.",
+                    })}
+                    onDrill={() => openLiveTickets("Pending", "pending")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Overdue (resolution SLA)"
+                    value={data.snapshot.metrics.overdueResolution}
+                    definition={definitionFromApi(definitions, "overdue_resolution", {
+                      label: "Overdue (resolution SLA)",
+                      kind: "fact",
+                      description: "Backlog tickets where due_by is set and due_by < now (UTC).",
+                    })}
+                    onDrill={() => openLiveTickets("Overdue (resolution)", "overdue_resolution")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="High / urgent priority"
+                    value={data.snapshot.metrics.highUrgent}
+                    definition={definitionFromApi(definitions, "high_urgent", SNAPSHOT_FALLBACKS.high_urgent)}
+                    onDrill={() => openLiveTickets("High / urgent priority", "high_urgent")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="FR SLA overdue / missed"
+                    value={data.snapshot.metrics.overdueFirstResponse}
+                    definition={definitionFromApi(definitions, "overdue_first_response", {
+                      label: "Overdue / missed first response SLA",
+                      kind: "fact",
+                      description:
+                        "Unresolved backlog tickets where fr_due_by is set, now is past fr_due_by, and stats.first_responded_at is absent.",
+                    })}
+                    onDrill={() =>
+                      openLiveTickets("FR SLA overdue (no first response)", "overdue_first_response")
+                    }
+                  />
+                  {(data.snapshot.metrics.assignedToAi ?? 0) > 0 ? (
+                    <LiveBacklogMetricCard
+                      label="Assigned to AI"
+                      value={data.snapshot.metrics.assignedToAi!}
+                      definition={{
+                        label: "Assigned to AI",
+                        kind: "snapshot",
+                        description: "Backlog in Freshdesk Assigned to AI Agent status (9000).",
+                      }}
+                      onDrill={() => openLiveTickets("Assigned to AI", "assigned_to_ai")}
+                    />
+                  ) : null}
+                </div>
+              </section>
+
+              <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
+
+              <section className="space-y-3 rounded-xl border border-border bg-card/40 p-3 sm:p-4">
+                <SectionHeader title="Selected Period Data — Not Live" />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/80 pb-3 text-sm">
+                  <LiveReportingToolbar
+                    draftFrom={draftFrom}
+                    draftTo={draftTo}
+                    onDraftFrom={setDraftFrom}
+                    onDraftTo={setDraftTo}
+                    onApply={applyDateRange}
+                  />
+                  {appliedFrom && appliedTo ? (
+                    <span className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium tabular-nums text-foreground">
+                      {formatCalendarDate(appliedFrom)} – {formatCalendarDate(appliedTo)}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <LivePeriodCountCard
                     label="Tickets created"
@@ -431,96 +529,6 @@ export function SupportAnalyticsPage() {
                   />
                 </div>
               </section>
-
-              <section className="space-y-3">
-                <SectionHeader title={data.snapshot.label} />
-                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                  <LiveBacklogMetricCard
-                    label="Total backlog"
-                    value={data.snapshot.metrics.backlogOpen}
-                    definition={definitionFromApi(definitions, "backlog_open", {
-                      label: "Total backlog",
-                      kind: "snapshot",
-                      description: "Unresolved workload statuses in the Live store.",
-                    })}
-                    onDrill={() => openLiveTickets("Total backlog", "backlog")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="Unassigned backlog"
-                    value={data.snapshot.metrics.unassigned}
-                    definition={definitionFromApi(definitions, "unassigned", {
-                      label: "Unassigned backlog",
-                      kind: "snapshot",
-                      description: "Backlog with no assignee at last sync.",
-                    })}
-                    onDrill={() => openLiveTickets("Unassigned backlog", "unassigned")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="Open"
-                    value={data.snapshot.metrics.statusOpen}
-                    definition={definitionFromApi(definitions, "status_open", SNAPSHOT_FALLBACKS.status_open)}
-                    onDrill={() => openLiveTickets("Open", "open")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="Waiting on customer"
-                    value={data.snapshot.metrics.waitingOnCustomer}
-                    definition={definitionFromApi(definitions, "waiting", SNAPSHOT_FALLBACKS.waiting)}
-                    onDrill={() => openLiveTickets("Waiting on customer", "waiting")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="Pending"
-                    value={data.snapshot.metrics.pending}
-                    definition={definitionFromApi(definitions, "pending_count", {
-                      label: "Pending",
-                      kind: "snapshot",
-                      description: "Freshdesk Pending status among synced backlog.",
-                    })}
-                    onDrill={() => openLiveTickets("Pending", "pending")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="Overdue (resolution SLA)"
-                    value={data.snapshot.metrics.overdueResolution}
-                    definition={definitionFromApi(definitions, "overdue_resolution", {
-                      label: "Overdue (resolution SLA)",
-                      kind: "fact",
-                      description: "Backlog past resolution due_by.",
-                    })}
-                    onDrill={() => openLiveTickets("Overdue (resolution)", "overdue_resolution")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="High / urgent priority"
-                    value={data.snapshot.metrics.highUrgent}
-                    definition={definitionFromApi(definitions, "high_urgent", SNAPSHOT_FALLBACKS.high_urgent)}
-                    onDrill={() => openLiveTickets("High / urgent priority", "high_urgent")}
-                  />
-                  <LiveBacklogMetricCard
-                    label="FR SLA overdue / missed"
-                    value={data.snapshot.metrics.overdueFirstResponse}
-                    definition={definitionFromApi(definitions, "overdue_first_response", {
-                      label: "FR SLA overdue / missed",
-                      kind: "fact",
-                      description: "Open backlog past first-response deadline without a recorded first response.",
-                    })}
-                    onDrill={() =>
-                      openLiveTickets("FR SLA overdue (no first response)", "overdue_first_response")
-                    }
-                  />
-                  {(data.snapshot.metrics.assignedToAi ?? 0) > 0 ? (
-                    <LiveBacklogMetricCard
-                      label="Assigned to AI"
-                      value={data.snapshot.metrics.assignedToAi!}
-                      definition={{
-                        label: "Assigned to AI",
-                        kind: "snapshot",
-                        description: "Backlog in Freshdesk Assigned to AI Agent status (9000).",
-                      }}
-                      onDrill={() => openLiveTickets("Assigned to AI", "assigned_to_ai")}
-                    />
-                  ) : null}
-                </div>
-              </section>
-
-              <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
             </>
           ) : null}
 

@@ -1,8 +1,10 @@
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SectionHeader, LoadingBlock, ErrorBlock } from "@/components/bits";
 import { formatNumber } from "@/lib/format";
 import { api } from "@/lib/api";
 import { STALE } from "@/lib/query-client";
+import { cn } from "@/lib/utils";
 import type {
   SupportAnalyticsTicketExplorerRequest,
   TicketExplorerFilterTab,
@@ -15,7 +17,10 @@ import {
   workloadMetricTabKey,
 } from "@/components/support-analytics/live-workload-shared";
 import type { AgentPresencePublic } from "@/components/support-analytics/agent-presence-display";
-import { AgentPresenceBlock } from "@/components/support-analytics/agent-presence-ui";
+import {
+  formatAgentPresenceCardSubtitle,
+  presenceStaleTitle,
+} from "@/components/support-analytics/agent-presence-display";
 
 type LiveAgentRow = LiveWorkloadCounts & {
   agentFreshdeskId: number | null;
@@ -32,6 +37,9 @@ type LiveAgentWorkload = {
 };
 
 type AgentMetricTab = LiveWorkloadMetricKey;
+
+/** Freshdesk roster names excluded from the live workload grid (product request). */
+const EXCLUDED_AGENT_NAMES = new Set(["karan tolani", "punit agarwal"]);
 
 function agentFilterTabs(agent: LiveAgentRow): TicketExplorerFilterTab[] {
   const responder = agentFreshdeskIdParam(agent.agentFreshdeskId);
@@ -50,9 +58,15 @@ export function SupportAnalyticsLiveAgentWorkload({
   });
 
   const data = workload.data;
-  const maxBacklog = Math.max(1, ...(data?.agents.map((a) => a.backlog) ?? [1]));
 
-  function openAgentExplorer(agent: LiveAgentRow, initialMetric: AgentMetricTab) {
+  const agents = useMemo(() => {
+    if (!data?.agents) return [];
+    return data.agents.filter(
+      (a) => !EXCLUDED_AGENT_NAMES.has(a.agentName.trim().toLowerCase()),
+    );
+  }, [data?.agents]);
+
+  function openAgentExplorer(agent: LiveAgentRow, initialMetric: AgentMetricTab = "backlog") {
     const tabs = agentFilterTabs(agent);
     const initialTabKey = workloadMetricTabKey(initialMetric);
     const tab = tabs.find((t) => t.key === initialTabKey) ?? tabs[0];
@@ -81,45 +95,14 @@ export function SupportAnalyticsLiveAgentWorkload({
 
       {data ? (
         <>
-          {data.agents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No assigned backlog tickets in the Live store.</p>
+          {agents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No agents to display.</p>
           ) : (
-            <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-              {data.agents.map((a) => (
-                <li key={String(a.agentFreshdeskId)} className="px-3 py-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <button
-                        type="button"
-                        className="text-left text-sm font-medium hover:underline"
-                        onClick={() => openAgentExplorer(a, "backlog")}
-                      >
-                        {a.agentName}
-                        <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
-                          {formatNumber(a.backlog)} backlog
-                        </span>
-                      </button>
-                      <AgentPresenceBlock presence={a.presence} />
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 text-xs">
-                      <CountChip label="Open" value={a.statusOpen} onClick={() => openAgentExplorer(a, "open")} />
-                      <CountChip
-                        label="Waiting"
-                        value={a.waitingOnCustomer}
-                        onClick={() => openAgentExplorer(a, "waiting")}
-                      />
-                      <CountChip
-                        label="Overdue"
-                        value={a.overdueResolution}
-                        tone="warn"
-                        onClick={() => openAgentExplorer(a, "overdue")}
-                      />
-                    </div>
-                  </div>
-                  <AgentWorkloadBar agent={a} maxBacklog={maxBacklog} />
-                </li>
+            <AgentCardGrid>
+              {agents.map((a) => (
+                <AgentWorkloadCard key={String(a.agentFreshdeskId)} agent={a} onOpen={() => openAgentExplorer(a)} />
               ))}
-            </ul>
+            </AgentCardGrid>
           )}
           {data.note ? <CoverageNote note={data.note} /> : null}
         </>
@@ -128,19 +111,54 @@ export function SupportAnalyticsLiveAgentWorkload({
   );
 }
 
-function AgentWorkloadBar({ agent, maxBacklog }: { agent: LiveAgentRow; maxBacklog: number }) {
+function AgentCardGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-muted">
-      <div className="h-full bg-sky-500/80" style={{ width: `${(agent.statusOpen / maxBacklog) * 100}%` }} />
-      <div
-        className="h-full bg-violet-500/70"
-        style={{ width: `${(agent.waitingOnCustomer / maxBacklog) * 100}%` }}
-      />
-      <div
-        className="h-full bg-amber-500/90"
-        style={{ width: `${Math.min(100, (agent.overdueResolution / maxBacklog) * 100)}%` }}
-      />
-    </div>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{children}</div>
+  );
+}
+
+function AgentWorkloadCard({ agent, onOpen }: { agent: LiveAgentRow; onOpen: () => void }) {
+  const presenceLine = formatAgentPresenceCardSubtitle(agent.presence);
+  const stale = agent.presence?.stale ?? false;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={stale ? presenceStaleTitle(true) : undefined}
+      className={cn(
+        "flex h-full min-h-[6.5rem] flex-col rounded-xl border border-border bg-card p-3 text-left shadow-sm transition",
+        "hover:border-primary/45 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        stale && "ring-1 ring-dashed ring-muted-foreground/35",
+      )}
+    >
+      <p className="text-sm font-semibold leading-snug text-foreground">{agent.agentName}</p>
+      {presenceLine ? (
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">{presenceLine}</p>
+      ) : null}
+      <p className="mt-auto pt-2 text-xs font-normal tabular-nums text-foreground">
+        <AgentMetricsInline agent={agent} />
+      </p>
+    </button>
+  );
+}
+
+function AgentMetricsInline({ agent }: { agent: LiveAgentRow }) {
+  const items: { label: string; value: number }[] = [
+    { label: "Backlog", value: agent.backlog },
+    { label: "Open", value: agent.statusOpen },
+    { label: "Waiting", value: agent.waitingOnCustomer },
+    { label: "Overdue", value: agent.overdueResolution },
+  ];
+  return (
+    <>
+      {items.map((item, i) => (
+        <span key={item.label}>
+          {i > 0 ? <span className="mx-2 text-muted-foreground/50"> </span> : null}
+          {item.label} {formatNumber(item.value)}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -152,30 +170,5 @@ function CoverageNote({ note }: { note: string }) {
       </summary>
       <p className="mt-1 leading-relaxed">{note}</p>
     </details>
-  );
-}
-
-function CountChip({
-  label,
-  value,
-  onClick,
-  tone,
-}: {
-  label: string;
-  value: number;
-  onClick: () => void;
-  tone?: "warn";
-}) {
-  return (
-    <button
-      type="button"
-      disabled={value === 0}
-      onClick={onClick}
-      className={`rounded-md border px-2 py-0.5 tabular-nums transition hover:border-primary/50 disabled:opacity-50 ${
-        tone === "warn" ? "border-amber-500/40 text-amber-800 dark:text-amber-300" : "border-border"
-      }`}
-    >
-      {label} {formatNumber(value)}
-    </button>
   );
 }

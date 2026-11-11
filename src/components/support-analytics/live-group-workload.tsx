@@ -87,19 +87,17 @@ export function SupportAnalyticsLiveGroupWorkload({
             <div className="overflow-x-auto rounded-xl border border-border bg-card">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  <col className="w-[23%]" />
-                  <col className="w-[15.4%]" />
-                  <col className="w-[15.4%]" />
-                  <col className="w-[15.4%]" />
-                  <col className="w-[15.4%]" />
-                  <col className="w-[15.4%]" />
+                  <col className="w-[28%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[18%]" />
                 </colgroup>
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left text-[11px] text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Group</th>
                     <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Backlog</th>
                     <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Open</th>
-                    <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Pending</th>
                     <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Waiting on Customer</th>
                     <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Overdue</th>
                   </tr>
@@ -170,7 +168,6 @@ function MetricCells({
     <>
       <MetricCell value={counts.backlog} onClick={() => onMetric("backlog")} />
       <MetricCell value={counts.statusOpen} onClick={() => onMetric("open")} />
-      <MetricCell value={counts.pending} onClick={() => onMetric("pending")} />
       <MetricCell value={counts.waitingOnCustomer} onClick={() => onMetric("waiting")} />
       <MetricCell value={counts.overdueResolution} onClick={() => onMetric("overdue")} tone="warn" />
     </>
@@ -192,8 +189,8 @@ function MetricCell({
         type="button"
         disabled={value === 0}
         onClick={onClick}
-        className={`tabular-nums hover:underline disabled:cursor-default disabled:text-muted-foreground disabled:no-underline ${
-          tone === "warn" && value > 0 ? "text-amber-800 dark:text-amber-300" : ""
+        className={`tabular-nums hover:underline disabled:cursor-default disabled:no-underline ${
+          tone === "warn" ? "text-amber-800 dark:text-amber-300" : ""
         }`}
       >
         {formatNumber(value)}

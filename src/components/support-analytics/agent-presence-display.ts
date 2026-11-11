@@ -59,6 +59,61 @@ export function formatPresenceSinceLocal(
   return `${day} ${month} ${year}, ${hour}:${minute} ${dayPeriod}`;
 }
 
+/** Card subtitle timestamp — local TZ, no year: `10 Nov, 1:06 AM` */
+export function formatPresenceSinceShort(
+  iso: string | null | undefined,
+  options?: { timeZone?: string },
+): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: options?.timeZone,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  const day = pick("day");
+  const month = pick("month");
+  const hour = pick("hour");
+  const minute = pick("minute");
+  const dayPeriod = pick("dayPeriod").toUpperCase();
+  return `${day} ${month}, ${hour}:${minute} ${dayPeriod}`;
+}
+
+export function formatAgentPresenceCardSubtitle(
+  presence: AgentPresencePublic | undefined,
+  timeZone?: string,
+): string {
+  if (!presence) return "";
+
+  if (presence.label === "Mixed") {
+    const lines = filterDisplayPresenceChannels(presence.channels)
+      .map((ch) => {
+        const since = formatPresenceSinceShort(ch.availabilityUpdatedAt, { timeZone });
+        if (!since) return ch.statusName;
+        return `${ch.statusName} · Since ${since}`;
+      })
+      .filter(Boolean);
+    if (lines.length === 0) return "Mixed";
+    if (lines.length === 1) return lines[0]!;
+    return `Mixed · ${lines.join(" · ")}`;
+  }
+
+  const since =
+    presence.label === "Unknown"
+      ? null
+      : formatPresenceSinceShort(presence.updatedAt, { timeZone });
+  if (!since) return presence.label;
+  return `${presence.label} · Since ${since}`;
+}
+
 export type PresenceSinceLine = {
   statusName: string;
   text: string | null;

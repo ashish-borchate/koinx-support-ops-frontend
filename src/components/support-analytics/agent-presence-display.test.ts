@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import {
   buildPresenceSinceLines,
   filterDisplayPresenceChannels,
+  formatAgentPresenceCardSubtitle,
   formatPresenceSinceLocal,
+  formatPresenceSinceShort,
   isAllChannelsChannel,
   presenceBadgeClassName,
   presenceBadgeTone,
@@ -112,6 +114,14 @@ assert.equal(isAllChannelsChannel("Email queue"), false);
 assert.equal(formatPresenceSinceLocal(null), null);
 const formatted = formatPresenceSinceLocal(iso, { timeZone: "UTC" });
 assert.equal(formatted, "11 Nov 2026, 6:45 PM");
+
+assert.equal(formatPresenceSinceShort(iso, { timeZone: "UTC" }), "11 Nov, 6:45 PM");
+assert.equal(
+  formatAgentPresenceCardSubtitle(basePresence({ label: "Break", updatedAt: iso }), "UTC"),
+  "Break · Since 11 Nov, 6:45 PM",
+);
+assert.equal(formatAgentPresenceCardSubtitle(basePresence({ label: "Idle", updatedAt: null })), "Idle");
+assert.match(formatAgentPresenceCardSubtitle(undefined), /^$/);
 
 assert.ok(!presenceBadgeClassName("Idle", false).includes("ring-dashed"));
 assert.ok(presenceBadgeClassName("Idle", true).includes("ring-dashed"));

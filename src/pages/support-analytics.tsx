@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { formatCalendarDate } from "@/lib/format";
 import { STALE } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -16,13 +15,7 @@ import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytic
 import { SupportAnalyticsLiveGroupWorkload } from "@/components/support-analytics/live-group-workload";
 import { LIVE_WORKLOAD_EXPLORER_NOTES } from "@/components/support-analytics/live-workload-shared";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
-import { ReportingPeriodSection } from "@/components/support-analytics/reporting-period-section";
-import type { DatePresetId } from "@/lib/support-analytics-date-presets";
-import {
-  LiveBacklogMetricCard,
-  LiveDurationCard,
-  LivePeriodCountCard,
-} from "@/components/support-analytics/live-metric-card";
+import { LiveBacklogMetricCard } from "@/components/support-analytics/live-metric-card";
 import type { LiveMetricDefinition } from "@/components/support-analytics/live-metric-info";
 import {
   SupportAnalyticsTicketExplorerModal,
@@ -141,45 +134,17 @@ const SNAPSHOT_FALLBACKS: Record<string, LiveMetricDefinition> = {
 export function SupportAnalyticsPage() {
   const { can, readOnly } = useAuth();
   const qc = useQueryClient();
-  const [draftFrom, setDraftFrom] = useState("");
-  const [draftTo, setDraftTo] = useState("");
-  const [appliedFrom, setAppliedFrom] = useState("");
-  const [appliedTo, setAppliedTo] = useState("");
   const [explorerRequest, setExplorerRequest] = useState<SupportAnalyticsTicketExplorerRequest | null>(null);
-  const rangeInit = useRef(false);
   const [mainTab, setMainTab] = useState<"live" | "historical">("live");
   const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
-  const [periodPreset, setPeriodPreset] = useState<DatePresetId>("custom");
-
-  const queryKey = useMemo(
-    () => ["support-analytics", "overview", appliedFrom, appliedTo],
-    [appliedFrom, appliedTo],
-  );
 
   const overview = useQuery({
-    queryKey,
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (appliedFrom && appliedTo) {
-        params.set("from", appliedFrom);
-        params.set("to", appliedTo);
-      }
-      const q = params.toString();
-      return api<OverviewPayload>(`/api/support-analytics/overview${q ? `?${q}` : ""}`);
-    },
+    queryKey: ["support-analytics", "overview"],
+    queryFn: () => api<OverviewPayload>("/api/support-analytics/overview"),
     staleTime: STALE.operational,
   });
 
   const data = overview.data;
-
-  useEffect(() => {
-    if (!data?.range || rangeInit.current) return;
-    rangeInit.current = true;
-    setDraftFrom(data.range.from);
-    setDraftTo(data.range.to);
-    setAppliedFrom(data.range.from);
-    setAppliedTo(data.range.to);
-  }, [data?.range]);
 
   const syncStatus = useQuery({
     queryKey: ["support-analytics", "sync-status"],
@@ -208,44 +173,12 @@ export function SupportAnalyticsPage() {
     },
   });
 
-  function applyReportingRange(from: string, to: string) {
-    if (!from || !to) {
-      toast.error("Select both From and To dates.");
-      return;
-    }
-    if (from > to) {
-      toast.error("From date cannot be later than To date.");
-      return;
-    }
-    setDraftFrom(from);
-    setDraftTo(to);
-    setAppliedFrom(from);
-    setAppliedTo(to);
-    setExplorerRequest(null);
-  }
-
-  function openLiveTickets(
-    title: string,
-    kind: string,
-    extra: Record<string, string> = {},
-    subtitleOverride?: string,
-  ) {
-    const periodKinds = new Set(["created", "resolved"]);
-    const queryParams: Record<string, string> = { kind, limit: "500", ...extra };
-    if (periodKinds.has(kind) && appliedFrom && appliedTo) {
-      queryParams.from = appliedFrom;
-      queryParams.to = appliedTo;
-    }
-    const subtitle =
-      periodKinds.has(kind) && appliedFrom && appliedTo
-        ? `${formatCalendarDate(appliedFrom)} – ${formatCalendarDate(appliedTo)} (IST) · Live sync store`
-        : undefined;
+  function openLiveTickets(title: string, kind: string, extra: Record<string, string> = {}) {
     setExplorerRequest({
       source: "live",
       title,
-      subtitle: subtitleOverride ?? subtitle,
       exportFileName: `live-${kind}.csv`,
-      queryParams,
+      queryParams: { kind, limit: "500", ...extra },
     });
   }
 
@@ -394,16 +327,6 @@ export function SupportAnalyticsPage() {
                     onDrill={() => openLiveTickets("Waiting on customer", "waiting")}
                   />
                   <LiveBacklogMetricCard
-                    label="Pending"
-                    value={data.snapshot.metrics.pending}
-                    definition={definitionFromApi(definitions, "pending_count", {
-                      label: "Pending",
-                      kind: "snapshot",
-                      description: "Tickets in Freshdesk status Pending (3) among synced backlog.",
-                    })}
-                    onDrill={() => openLiveTickets("Pending", "pending")}
-                  />
-                  <LiveBacklogMetricCard
                     label="Overdue (resolution SLA)"
                     value={data.snapshot.metrics.overdueResolution}
                     definition={definitionFromApi(definitions, "overdue_resolution", {
@@ -450,93 +373,6 @@ export function SupportAnalyticsPage() {
               <SupportAnalyticsLiveGroupWorkload onExplore={setExplorerRequest} />
 
               <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
-
-              <section className="space-y-3 rounded-xl border border-border bg-card/40 p-3 sm:p-4">
-                <SectionHeader title="Selected Period Data — Not Live" />
-                <ReportingPeriodSection
-                  draftFrom={draftFrom}
-                  draftTo={draftTo}
-                  appliedFrom={appliedFrom}
-                  appliedTo={appliedTo}
-                  preset={periodPreset}
-                  onPresetChange={setPeriodPreset}
-                  onDraftFrom={setDraftFrom}
-                  onDraftTo={setDraftTo}
-                  onApply={applyReportingRange}
-                  showIstInSummary={false}
-                />
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <LivePeriodCountCard
-                    label="Tickets created"
-                    value={data.periodActivity.ticketsCreated}
-                    definition={definitionFromApi(definitions, "tickets_created", {
-                      label: "Tickets created",
-                      kind: "fact",
-                      description: "Tickets created in the reporting period.",
-                    })}
-                    onDrill={() => openLiveTickets("Tickets created", "created")}
-                  />
-                  <LivePeriodCountCard
-                    label="Tickets resolved"
-                    value={data.periodActivity.ticketsResolved}
-                    definition={definitionFromApi(definitions, "tickets_resolved", {
-                      label: "Tickets resolved",
-                      kind: "fact",
-                      description: "Tickets resolved in the reporting period.",
-                    })}
-                    onDrill={() => openLiveTickets("Tickets resolved", "resolved")}
-                  />
-                  <LiveDurationCard
-                    label="First response time"
-                    available={data.periodActivity.firstResponseTime.available}
-                    count={data.periodActivity.firstResponseTime.count}
-                    averageMs={data.periodActivity.firstResponseTime.averageMs}
-                    medianMs={data.periodActivity.firstResponseTime.medianMs}
-                    definition={definitionFromApi(definitions, "first_response_time", {
-                      label: "First response time",
-                      kind: "fact",
-                      description: data.periodActivity.firstResponseTime.note,
-                    })}
-                    extraNote={data.periodActivity.firstResponseTime.note}
-                    onDrill={() =>
-                      openLiveTickets(
-                        "First response time",
-                        "created",
-                        {},
-                        appliedFrom && appliedTo
-                          ? `${formatCalendarDate(appliedFrom)} – ${formatCalendarDate(appliedTo)} (IST) · n = ${data.periodActivity.firstResponseTime.count} tickets with first response`
-                          : `n = ${data.periodActivity.firstResponseTime.count} tickets with first response`,
-                      )
-                    }
-                  />
-                  <LiveDurationCard
-                    label="Resolution time"
-                    available={data.periodActivity.resolutionTime.available}
-                    count={data.periodActivity.resolutionTime.count}
-                    averageMs={data.periodActivity.resolutionTime.averageMs}
-                    medianMs={data.periodActivity.resolutionTime.medianMs}
-                    definition={definitionFromApi(definitions, "resolution_time", {
-                      label: "Resolution time",
-                      kind: "fact",
-                      description: data.periodActivity.resolutionTime.note,
-                    })}
-                    extraNote={
-                      data.periodActivity.resolutionTime.resolutionTimestampPolicy ||
-                      data.periodActivity.resolutionTime.note
-                    }
-                    onDrill={() =>
-                      openLiveTickets(
-                        "Resolution time",
-                        "resolved",
-                        {},
-                        appliedFrom && appliedTo
-                          ? `${formatCalendarDate(appliedFrom)} – ${formatCalendarDate(appliedTo)} (IST) · n = ${data.periodActivity.resolutionTime.count} tickets in average`
-                          : `n = ${data.periodActivity.resolutionTime.count} tickets in average`,
-                      )
-                    }
-                  />
-                </div>
-              </section>
             </>
           ) : null}
 

@@ -28,7 +28,7 @@ export function agentFreshdeskIdParam(agentFreshdeskId: number | null): string {
 }
 
 export const LIVE_WORKLOAD_EXPLORER_NOTES =
-  "Status tab counts match the group you opened from; badges are hidden after you change the group filter. The ticket list below reflects your current filters. Overdue overlaps Open, Pending, and Waiting — tickets are not double-counted in backlog totals.";
+  "Status tab counts match the group you opened from; badges are hidden after you change the group filter. The ticket list below reflects your current filters. Overdue overlaps Open and Waiting — tickets are not double-counted in backlog totals.";
 
 export function buildWorkloadFilterTabs(
   counts: LiveWorkloadCounts,
@@ -46,12 +46,6 @@ export function buildWorkloadFilterTabs(
       label: "Open",
       count: counts.statusOpen,
       queryParams: { kind: "open", ...baseQuery },
-    },
-    {
-      key: "pending",
-      label: "Pending",
-      count: counts.pending,
-      queryParams: { kind: "pending", ...baseQuery },
     },
     {
       key: "waiting",

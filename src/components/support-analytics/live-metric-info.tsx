@@ -1,6 +1,6 @@
 import { Info } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { MouseEvent } from "react";
+import type { MouseEvent, PointerEvent } from "react";
 
 export type LiveMetricDefinition = {
   label: string;
@@ -16,10 +16,11 @@ export function LiveMetricInfoButton({
   definition: LiveMetricDefinition;
   className?: string;
 }) {
-  function stopDrill(e: MouseEvent) {
-    e.preventDefault();
+  function stopBubble(e: MouseEvent | PointerEvent) {
     e.stopPropagation();
   }
+
+  const hoverSummary = `${definition.description}${definition.notes ? ` ${definition.notes}` : ""}`.slice(0, 280);
 
   return (
     <Popover>
@@ -28,8 +29,8 @@ export function LiveMetricInfoButton({
           type="button"
           className={`inline-flex shrink-0 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ""}`}
           aria-label={`About ${definition.label}`}
-          onClick={stopDrill}
-          onPointerDown={stopDrill}
+          title={hoverSummary}
+          onPointerDown={stopBubble}
         >
           <Info className="h-3.5 w-3.5" aria-hidden />
         </button>

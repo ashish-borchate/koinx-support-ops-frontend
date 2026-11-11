@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { ErrorBlock, LoadingBlock, PageHeader, SectionHeader } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -8,7 +9,7 @@ import { toast } from "sonner";
 import { formatCalendarDate } from "@/lib/format";
 import { STALE } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
 import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytics/live-agent-workload";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
@@ -215,7 +216,12 @@ export function SupportAnalyticsPage() {
     setExplorerRequest(null);
   }
 
-  function openLiveTickets(title: string, kind: string, extra: Record<string, string> = {}) {
+  function openLiveTickets(
+    title: string,
+    kind: string,
+    extra: Record<string, string> = {},
+    subtitleOverride?: string,
+  ) {
     const periodKinds = new Set(["created", "resolved"]);
     const queryParams: Record<string, string> = { kind, limit: "500", ...extra };
     if (periodKinds.has(kind) && appliedFrom && appliedTo) {
@@ -229,7 +235,7 @@ export function SupportAnalyticsPage() {
     setExplorerRequest({
       source: "live",
       title,
-      subtitle,
+      subtitle: subtitleOverride ?? subtitle,
       exportFileName: `live-${kind}.csv`,
       queryParams,
     });
@@ -259,8 +265,13 @@ export function SupportAnalyticsPage() {
           canSync || showSyncDetails ? (
             <div className="flex flex-wrap items-center justify-end gap-2">
               {canSync ? (
-                <Button variant="default" size="sm" disabled={syncRun.isPending} onClick={() => syncRun.mutate()}>
-                  <RefreshCw className={syncRun.isPending ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-9 px-4"
+                  disabled={syncRun.isPending}
+                  onClick={() => syncRun.mutate()}
+                >
                   {syncRun.isPending ? "Syncing…" : "Sync Freshdesk"}
                 </Button>
               ) : null}
@@ -269,11 +280,11 @@ export function SupportAnalyticsPage() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="gap-1.5"
+                  className="h-9 gap-1.5 px-4"
                   aria-expanded={syncDetailsOpen}
                   onClick={() => setSyncDetailsOpen((v) => !v)}
                 >
-                  Sync details
+                  Sync History
                   {syncDetailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                 </Button>
               ) : null}
@@ -283,14 +294,29 @@ export function SupportAnalyticsPage() {
       />
 
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "live" | "historical")} className="gap-4">
-        <TabsList variant="line" className="h-auto w-full justify-start gap-1 border-0 bg-transparent p-0 sm:w-auto">
-          <TabsTrigger value="live" className="px-4 py-2 after:bottom-0">
-            Live sync
-          </TabsTrigger>
-          <TabsTrigger value="historical" className="px-4 py-2 after:bottom-0">
-            Historical
-          </TabsTrigger>
-        </TabsList>
+        <nav className="flex flex-wrap gap-1.5 border-b border-border pb-2" aria-label="Analytics mode">
+          {(
+            [
+              { id: "live" as const, label: "Live sync" },
+              { id: "historical" as const, label: "Historical analysis" },
+            ] as const
+          ).map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              aria-pressed={mainTab === mode.id}
+              onClick={() => setMainTab(mode.id)}
+              className={cn(
+                "rounded-lg border px-3.5 py-2 text-sm font-medium motion-safe:transition-colors",
+                mainTab === mode.id
+                  ? "border-primary bg-primary/10 text-primary shadow-sm"
+                  : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/40 hover:text-foreground",
+              )}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </nav>
         <TabsContent value="historical" className="mt-4">
           <SupportAnalyticsHistoricalPanel />
         </TabsContent>
@@ -333,7 +359,7 @@ export function SupportAnalyticsPage() {
             <>
               <section className="space-y-3">
                 <SectionHeader title="Selected-period activity" />
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <LivePeriodCountCard
                     label="Tickets created"
                     value={data.periodActivity.ticketsCreated}
@@ -354,8 +380,6 @@ export function SupportAnalyticsPage() {
                     })}
                     onDrill={() => openLiveTickets("Tickets resolved", "resolved")}
                   />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
                   <LiveDurationCard
                     label="First response time"
                     available={data.periodActivity.firstResponseTime.available}
@@ -368,6 +392,16 @@ export function SupportAnalyticsPage() {
                       description: data.periodActivity.firstResponseTime.note,
                     })}
                     extraNote={data.periodActivity.firstResponseTime.note}
+                    onDrill={() =>
+                      openLiveTickets(
+                        "First response time",
+                        "created",
+                        {},
+                        appliedFrom && appliedTo
+                          ? `${formatCalendarDate(appliedFrom)} – ${formatCalendarDate(appliedTo)} (IST) · n = ${data.periodActivity.firstResponseTime.count} tickets with first response`
+                          : `n = ${data.periodActivity.firstResponseTime.count} tickets with first response`,
+                      )
+                    }
                   />
                   <LiveDurationCard
                     label="Resolution time"
@@ -383,6 +417,16 @@ export function SupportAnalyticsPage() {
                     extraNote={
                       data.periodActivity.resolutionTime.resolutionTimestampPolicy ||
                       data.periodActivity.resolutionTime.note
+                    }
+                    onDrill={() =>
+                      openLiveTickets(
+                        "Resolution time",
+                        "resolved",
+                        {},
+                        appliedFrom && appliedTo
+                          ? `${formatCalendarDate(appliedFrom)} – ${formatCalendarDate(appliedTo)} (IST) · n = ${data.periodActivity.resolutionTime.count} tickets in average`
+                          : `n = ${data.periodActivity.resolutionTime.count} tickets in average`,
+                      )
                     }
                   />
                 </div>

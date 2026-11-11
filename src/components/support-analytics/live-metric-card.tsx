@@ -80,6 +80,7 @@ export function LiveDurationCard({
   averageMs,
   medianMs,
   extraNote,
+  onDrill,
 }: {
   label: string;
   definition: LiveMetricDefinition;
@@ -88,6 +89,7 @@ export function LiveDurationCard({
   averageMs: number | null;
   medianMs: number | null;
   extraNote?: string;
+  onDrill?: () => void;
 }) {
   function formatMs(ms: number | null) {
     if (ms == null) return "—";
@@ -96,29 +98,49 @@ export function LiveDurationCard({
     return `${h.toFixed(1)}h`;
   }
 
+  const drillNotes = [
+    extraNote,
+    count > 0 ? `Based on ${formatNumber(count)} ticket${count === 1 ? "" : "s"} in this period.` : null,
+    medianMs != null ? `Median ${formatMs(medianMs)}.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const desc =
-    extraNote && !definition.notes
-      ? { ...definition, notes: extraNote }
-      : extraNote
-        ? { ...definition, notes: `${definition.notes}\n${extraNote}` }
+    drillNotes && !definition.notes
+      ? { ...definition, notes: drillNotes }
+      : drillNotes
+        ? { ...definition, notes: `${definition.notes ?? ""}\n${drillNotes}`.trim() }
         : definition;
 
-  return (
-    <div className="flex min-h-[5.25rem] flex-col rounded-xl border border-border bg-card p-3">
+  const inner = (
+    <>
       <div className="flex items-start justify-between gap-1">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
         <LiveMetricInfoButton definition={desc} />
       </div>
       {available ? (
-        <>
-          <p className="mt-2 text-lg font-semibold leading-tight text-foreground">
-            Avg {formatMs(averageMs)} · Med {formatMs(medianMs)}
-          </p>
-          <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">n = {formatNumber(count)}</p>
-        </>
+        <p className="mt-2 text-2xl font-semibold tabular-nums leading-none text-foreground">
+          {formatMs(averageMs)}
+          <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">avg</span>
+        </p>
       ) : (
-        <p className="mt-2 text-lg font-semibold text-muted-foreground">—</p>
+        <p className="mt-2 text-2xl font-semibold text-muted-foreground">—</p>
       )}
-    </div>
+    </>
   );
+
+  if (onDrill && available && count > 0) {
+    return (
+      <button
+        type="button"
+        onClick={onDrill}
+        className="flex min-h-[5.25rem] flex-col rounded-xl border border-border bg-card p-3 text-left transition hover:border-primary/40"
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className="flex min-h-[5.25rem] flex-col rounded-xl border border-border bg-card p-3">{inner}</div>;
 }

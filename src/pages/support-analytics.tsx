@@ -1,30 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, RefreshCw } from "lucide-react";
-import {
-  ErrorBlock,
-  LoadingBlock,
-  PageHeader,
-  SectionHeader,
-} from "@/components/bits";
+import { RefreshCw } from "lucide-react";
+import { ErrorBlock, LoadingBlock, PageHeader, SectionHeader } from "@/components/bits";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { formatCalendarDate, formatDurationHours, formatNumber } from "@/lib/format";
+import { formatCalendarDate } from "@/lib/format";
 import { STALE } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
 import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytics/live-agent-workload";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
+import { LiveReportingToolbar } from "@/components/support-analytics/live-reporting-toolbar";
+import {
+  LiveBacklogMetricCard,
+  LiveDurationCard,
+  LivePeriodCountCard,
+} from "@/components/support-analytics/live-metric-card";
+import type { LiveMetricDefinition } from "@/components/support-analytics/live-metric-info";
 import {
   SupportAnalyticsTicketExplorerModal,
   type SupportAnalyticsTicketExplorerRequest,
@@ -38,35 +32,9 @@ type DurationMetric = {
   note: string;
 };
 
-type CompareNumber = {
-  current: number;
-  previous: number;
-  delta: number;
-  deltaPct: number | null;
-  deltaPctLabel: string;
-};
-
-type CompareDuration = {
-  currentMs: number | null;
-  previousMs: number | null;
-  deltaMs: number | null;
-  deltaPctLabel: string;
-  currentCount: number;
-  previousCount: number;
-};
-
 type OverviewPayload = {
   range: { from: string; to: string; timezone: string; source?: string };
-  compare: {
-    range: { from: string; to: string; timezone: string };
-    periodActivity: {
-      ticketsCreated: CompareNumber;
-      ticketsResolved: CompareNumber;
-      firstResponseTimeAvg: CompareDuration;
-      resolutionTimeAvg: CompareDuration;
-    };
-    hasPriorSyncedData: boolean;
-  } | null;
+  compare: unknown;
   freshness: {
     lastSuccessfulTicketSyncAt: string | null;
     ticketsStored: number;
@@ -130,73 +98,39 @@ type OverviewPayload = {
   definitions: { id: string; label: string; description: string; kind: string; notes?: string }[];
 };
 
-function formatMsDuration(ms: number | null | undefined) {
-  if (ms == null || Number.isNaN(ms)) return "—";
-  return formatDurationHours(ms / 3_600_000);
+function definitionFromApi(
+  definitions: OverviewPayload["definitions"],
+  id: string,
+  fallback: LiveMetricDefinition,
+): LiveMetricDefinition {
+  const row = definitions.find((d) => d.id === id);
+  if (!row) return fallback;
+  return {
+    label: row.label,
+    description: row.description,
+    kind: row.kind,
+    notes: row.notes,
+  };
 }
 
-function MetricCard({
-  title,
-  value,
-  hint,
-  onDrill,
-}: {
-  title: string;
-  value: number | string;
-  hint?: string;
-  onDrill?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onDrill}
-      className="rounded-xl border border-border bg-card p-4 text-left transition hover:border-primary/40 disabled:cursor-default"
-      disabled={!onDrill}
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
-        {typeof value === "number" ? formatNumber(value) : value}
-      </p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
-    </button>
-  );
-}
-
-function TimingCard({ title, metric }: { title: string; metric: DurationMetric }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-      {metric.available ? (
-        <>
-          <p className="mt-2 text-lg font-semibold text-foreground">
-            Avg {formatMsDuration(metric.averageMs)} · Median {formatMsDuration(metric.medianMs)}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">n = {formatNumber(metric.count)} tickets</p>
-        </>
-      ) : (
-        <p className="mt-2 text-sm text-muted-foreground">—</p>
-      )}
-      <p className="mt-2 text-xs text-muted-foreground">{metric.note}</p>
-    </div>
-  );
-}
-
-function scheduledAttemptLabel(status?: string | null) {
-  switch (status) {
-    case "success":
-      return "Succeeded";
-    case "partial":
-      return "Partial";
-    case "failed":
-      return "Failed";
-    case "skipped":
-      return "Skipped";
-    case "running":
-      return "Running";
-    default:
-      return status || "Not yet recorded";
-  }
-}
+const SNAPSHOT_FALLBACKS: Record<string, LiveMetricDefinition> = {
+  status_open: {
+    label: "Open",
+    kind: "snapshot",
+    description: "Tickets in Freshdesk status Open (2) among synced backlog at the latest snapshot.",
+  },
+  waiting: {
+    label: "Waiting on customer",
+    kind: "snapshot",
+    description: "Tickets in Freshdesk status Waiting on Customer (6) among synced backlog.",
+  },
+  high_urgent: {
+    label: "High / urgent priority",
+    kind: "snapshot",
+    description:
+      "Backlog tickets with Freshdesk priority High (3) or Urgent (4). Overlaps status counts — not added into total backlog twice.",
+  },
+};
 
 export function SupportAnalyticsPage() {
   const { can, readOnly } = useAuth();
@@ -302,6 +236,7 @@ export function SupportAnalyticsPage() {
 
   const canSync = can("support_analytics.sync") && !readOnly;
   const freshness = data?.freshness;
+  const definitions = data?.definitions ?? [];
   const overviewErrorMessage =
     overview.error instanceof Error && overview.error.message
       ? overview.error.message
@@ -312,14 +247,14 @@ export function SupportAnalyticsPage() {
       : "Freshdesk sync failed.";
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-6 pb-10">
       <PageHeader
         eyebrow="Operations"
         title="Support Analytics"
         description="Freshdesk ticket operations — separate from official KPI Performance scoring."
         action={
           canSync ? (
-            <Button variant="outline" size="sm" disabled={syncRun.isPending} onClick={() => syncRun.mutate()}>
+            <Button variant="default" size="sm" disabled={syncRun.isPending} onClick={() => syncRun.mutate()}>
               <RefreshCw className={syncRun.isPending ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
               {syncRun.isPending ? "Syncing…" : "Sync Freshdesk"}
             </Button>
@@ -332,223 +267,200 @@ export function SupportAnalyticsPage() {
           <TabsTrigger value="live">Live (API sync)</TabsTrigger>
           <TabsTrigger value="historical">Historical Analytics</TabsTrigger>
         </TabsList>
-        <TabsContent value="historical" className="mt-6">
+        <TabsContent value="historical" className="mt-4">
           <SupportAnalyticsHistoricalPanel />
         </TabsContent>
-        <TabsContent value="live" className="mt-6 space-y-8">
-      {syncRun.isPending ? <LoadingBlock label="Syncing Freshdesk tickets into the analytics store…" /> : null}
+        <TabsContent value="live" className="mt-4 space-y-6">
+          {syncRun.isPending ? <LoadingBlock label="Syncing Freshdesk tickets into the analytics store…" /> : null}
 
-      {syncRun.isError ? (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          <p className="font-medium">Sync failed</p>
-          <p className="mt-1">{syncErrorMessage}</p>
-        </div>
-      ) : null}
-
-      {freshness ? (
-        <div className="space-y-2">
-          <SupportAnalyticsSchedulerStatusPanel
-            display={freshness.display}
-            inOperationalWindow={freshness.schedule?.inQuietHours === false}
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <dt className="text-xs text-muted-foreground">Tickets tracked (Live store)</dt>
-                <dd className="font-semibold tabular-nums">{formatNumber(freshness.ticketsStored)}</dd>
-              </div>
-            </dl>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                Important note
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Live analytics data</DialogTitle>
-              </DialogHeader>
-              <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                <li>This dashboard uses tickets successfully synced into the Support Analytics store.</li>
-                <li>Incremental sync may not yet include every older Freshdesk ticket.</li>
-                <li>Backlog counts reflect the latest stored snapshot, not guaranteed full Freshdesk volume.</li>
-                <li>Period metrics use available stored tickets for the dates you select.</li>
-                <li>
-                  Last successful sync:{" "}
-                  <strong>{freshness.display?.lastSuccessfulSyncLabelIst || "—"}</strong>
-                  {freshness.lastSyncStatus ? (
-                    <>
-                      {" "}
-                      · Latest run: <strong>{freshness.lastSyncStatus}</strong>
-                      {freshness.lastSyncMessage ? ` — ${freshness.lastSyncMessage}` : ""}
-                    </>
-                  ) : null}
-                </li>
-                {freshness.display?.latestScheduledStatus ? (
-                  <li>
-                    Latest scheduled attempt:{" "}
-                    <strong>{scheduledAttemptLabel(freshness.display.latestScheduledStatus)}</strong>
-                    {freshness.display.latestScheduledMessage ? ` — ${freshness.display.latestScheduledMessage}` : ""}
-                  </li>
-                ) : null}
-              </ul>
-            </DialogContent>
-          </Dialog>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground">From (IST)</label>
-          <Input type="date" className="h-9 w-40" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} />
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground">To (IST)</label>
-          <Input type="date" className="h-9 w-40" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} />
-        </div>
-        <Button size="sm" onClick={applyDateRange}>
-          Apply range
-        </Button>
-        {data?.definitions ? (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <Info className="mr-2 h-4 w-4" />
-                Metric definitions
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[80vh] max-w-lg overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Metric definitions</DialogTitle>
-              </DialogHeader>
-              <ul className="space-y-3 text-sm">
-                {data.definitions.map((d) => (
-                  <li key={d.id}>
-                    <p className="font-medium">
-                      {d.label}{" "}
-                      <span className="text-xs font-normal text-muted-foreground">({d.kind})</span>
-                    </p>
-                    <p className="text-muted-foreground">{d.description}</p>
-                    {d.notes ? <p className="text-xs text-amber-700 dark:text-amber-400">{d.notes}</p> : null}
-                  </li>
-                ))}
-              </ul>
-            </DialogContent>
-          </Dialog>
-        ) : null}
-      </div>
-
-      {overview.isLoading ? <LoadingBlock label="Loading analytics…" /> : null}
-      {overview.isError ? <ErrorBlock message={overviewErrorMessage} /> : null}
-
-      {data ? (
-        <>
-          <p className="text-sm font-medium text-foreground">
-            Reporting period: {formatCalendarDate(data.range.from)} – {formatCalendarDate(data.range.to)} (IST)
-            {data.range.source === "default" ? (
-              <span className="ml-2 font-normal text-muted-foreground">(default rolling window)</span>
-            ) : null}
-          </p>
-
-          <SectionHeader title="Selected-period activity" />
-          <p className="text-xs text-muted-foreground">
-            Counts and timings below use only tickets in the analytics store for the reporting period.
-          </p>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              title="Tickets created"
-              value={data.periodActivity.ticketsCreated}
-              onDrill={() => openLiveTickets("Tickets created", "created")}
-            />
-            <MetricCard
-              title="Tickets resolved"
-              value={data.periodActivity.ticketsResolved}
-              onDrill={() => openLiveTickets("Tickets resolved", "resolved")}
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TimingCard title="First response time" metric={data.periodActivity.firstResponseTime} />
-            <TimingCard title="Resolution time" metric={data.periodActivity.resolutionTime} />
-          </div>
-          {data.periodActivity.resolutionTime.resolutionTimestampPolicy ? (
-            <p className="text-xs text-muted-foreground">{data.periodActivity.resolutionTime.resolutionTimestampPolicy}</p>
+          {syncRun.isError ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              <p className="font-medium">Sync failed</p>
+              <p className="mt-1">{syncErrorMessage}</p>
+            </div>
           ) : null}
 
-          <SectionHeader title={data.snapshot.label} />
-          <p className="-mt-2 text-xs text-muted-foreground">
-            Backlog is Open + Pending + Waiting + other unresolved statuses. Overdue and High/Urgent overlap status
-            counts and are not added again.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              title="Total backlog"
-              value={data.snapshot.metrics.backlogOpen}
-              hint="All unresolved backlog statuses"
-              onDrill={() => openLiveTickets("Total backlog", "backlog")}
+          {freshness?.display ? (
+            <SupportAnalyticsSchedulerStatusPanel
+              display={freshness.display}
+              inOperationalWindow={freshness.schedule?.inQuietHours === false}
+              ticketsStored={freshness.ticketsStored}
             />
-            <MetricCard
-              title="Open"
-              value={data.snapshot.metrics.statusOpen}
-              hint="Freshdesk status Open"
-              onDrill={() => openLiveTickets("Open", "open")}
-            />
-            <MetricCard
-              title="Waiting on customer"
-              value={data.snapshot.metrics.waitingOnCustomer}
-              onDrill={() => openLiveTickets("Waiting on customer", "waiting")}
-            />
-            <MetricCard
-              title="Pending"
-              value={data.snapshot.metrics.pending}
-              onDrill={() => openLiveTickets("Pending", "pending")}
-            />
-            {(data.snapshot.metrics.assignedToAi ?? 0) > 0 ? (
-              <MetricCard
-                title="Assigned to AI"
-                value={data.snapshot.metrics.assignedToAi!}
-                onDrill={() => openLiveTickets("Assigned to AI", "assigned_to_ai")}
-              />
-            ) : null}
-            <MetricCard
-              title="Unassigned backlog"
-              value={data.snapshot.metrics.unassigned}
-              hint="No assignee at last sync"
-              onDrill={() => openLiveTickets("Unassigned backlog", "unassigned")}
-            />
-            <MetricCard
-              title="Overdue (resolution SLA)"
-              value={data.snapshot.metrics.overdueResolution}
-              onDrill={() => openLiveTickets("Overdue (resolution)", "overdue_resolution")}
-            />
-            <MetricCard
-              title="High / urgent priority"
-              value={data.snapshot.metrics.highUrgent}
-              onDrill={() => openLiveTickets("High / urgent priority", "high_urgent")}
-            />
-            <MetricCard
-              title="FR SLA overdue / missed"
-              value={data.snapshot.metrics.overdueFirstResponse}
-              hint="First response not met on open backlog"
-              onDrill={() =>
-                openLiveTickets("FR SLA overdue (no first response)", "overdue_first_response")
-              }
-            />
-          </div>
+          ) : null}
 
-          <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
-        </>
-      ) : null}
+          <LiveReportingToolbar
+            draftFrom={draftFrom}
+            draftTo={draftTo}
+            onDraftFrom={setDraftFrom}
+            onDraftTo={setDraftTo}
+            onApply={applyDateRange}
+            appliedFrom={appliedFrom}
+            appliedTo={appliedTo}
+            rangeSource={data?.range.source}
+            definitions={definitions}
+          />
 
-      <SupportAnalyticsTicketExplorerModal request={explorerRequest} onClose={() => setExplorerRequest(null)} />
+          {overview.isLoading ? <LoadingBlock label="Loading analytics…" /> : null}
+          {overview.isError ? <ErrorBlock message={overviewErrorMessage} /> : null}
 
-      {syncRun.data?.run ? (
-        <p className="text-xs text-muted-foreground">
-          Sync: {syncRun.data.run.status} — {syncRun.data.run.message}
-        </p>
-      ) : null}
+          {data ? (
+            <>
+              <section className="space-y-3">
+                <SectionHeader title="Selected-period activity" />
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <LivePeriodCountCard
+                    label="Tickets created"
+                    value={data.periodActivity.ticketsCreated}
+                    definition={definitionFromApi(definitions, "tickets_created", {
+                      label: "Tickets created",
+                      kind: "fact",
+                      description: "Tickets created in the reporting period.",
+                    })}
+                    onDrill={() => openLiveTickets("Tickets created", "created")}
+                  />
+                  <LivePeriodCountCard
+                    label="Tickets resolved"
+                    value={data.periodActivity.ticketsResolved}
+                    definition={definitionFromApi(definitions, "tickets_resolved", {
+                      label: "Tickets resolved",
+                      kind: "fact",
+                      description: "Tickets resolved in the reporting period.",
+                    })}
+                    onDrill={() => openLiveTickets("Tickets resolved", "resolved")}
+                  />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <LiveDurationCard
+                    label="First response time"
+                    available={data.periodActivity.firstResponseTime.available}
+                    count={data.periodActivity.firstResponseTime.count}
+                    averageMs={data.periodActivity.firstResponseTime.averageMs}
+                    medianMs={data.periodActivity.firstResponseTime.medianMs}
+                    definition={definitionFromApi(definitions, "first_response_time", {
+                      label: "First response time",
+                      kind: "fact",
+                      description: data.periodActivity.firstResponseTime.note,
+                    })}
+                    extraNote={data.periodActivity.firstResponseTime.note}
+                  />
+                  <LiveDurationCard
+                    label="Resolution time"
+                    available={data.periodActivity.resolutionTime.available}
+                    count={data.periodActivity.resolutionTime.count}
+                    averageMs={data.periodActivity.resolutionTime.averageMs}
+                    medianMs={data.periodActivity.resolutionTime.medianMs}
+                    definition={definitionFromApi(definitions, "resolution_time", {
+                      label: "Resolution time",
+                      kind: "fact",
+                      description: data.periodActivity.resolutionTime.note,
+                    })}
+                    extraNote={
+                      data.periodActivity.resolutionTime.resolutionTimestampPolicy ||
+                      data.periodActivity.resolutionTime.note
+                    }
+                  />
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <SectionHeader title={data.snapshot.label} />
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  <LiveBacklogMetricCard
+                    label="Total backlog"
+                    value={data.snapshot.metrics.backlogOpen}
+                    definition={definitionFromApi(definitions, "backlog_open", {
+                      label: "Total backlog",
+                      kind: "snapshot",
+                      description: "Unresolved workload statuses in the Live store.",
+                    })}
+                    onDrill={() => openLiveTickets("Total backlog", "backlog")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Unassigned backlog"
+                    value={data.snapshot.metrics.unassigned}
+                    definition={definitionFromApi(definitions, "unassigned", {
+                      label: "Unassigned backlog",
+                      kind: "snapshot",
+                      description: "Backlog with no assignee at last sync.",
+                    })}
+                    onDrill={() => openLiveTickets("Unassigned backlog", "unassigned")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Open"
+                    value={data.snapshot.metrics.statusOpen}
+                    definition={definitionFromApi(definitions, "status_open", SNAPSHOT_FALLBACKS.status_open)}
+                    onDrill={() => openLiveTickets("Open", "open")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Waiting on customer"
+                    value={data.snapshot.metrics.waitingOnCustomer}
+                    definition={definitionFromApi(definitions, "waiting", SNAPSHOT_FALLBACKS.waiting)}
+                    onDrill={() => openLiveTickets("Waiting on customer", "waiting")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Pending"
+                    value={data.snapshot.metrics.pending}
+                    definition={definitionFromApi(definitions, "pending_count", {
+                      label: "Pending",
+                      kind: "snapshot",
+                      description: "Freshdesk Pending status among synced backlog.",
+                    })}
+                    onDrill={() => openLiveTickets("Pending", "pending")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="Overdue (resolution SLA)"
+                    value={data.snapshot.metrics.overdueResolution}
+                    definition={definitionFromApi(definitions, "overdue_resolution", {
+                      label: "Overdue (resolution SLA)",
+                      kind: "fact",
+                      description: "Backlog past resolution due_by.",
+                    })}
+                    onDrill={() => openLiveTickets("Overdue (resolution)", "overdue_resolution")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="High / urgent priority"
+                    value={data.snapshot.metrics.highUrgent}
+                    definition={definitionFromApi(definitions, "high_urgent", SNAPSHOT_FALLBACKS.high_urgent)}
+                    onDrill={() => openLiveTickets("High / urgent priority", "high_urgent")}
+                  />
+                  <LiveBacklogMetricCard
+                    label="FR SLA overdue / missed"
+                    value={data.snapshot.metrics.overdueFirstResponse}
+                    definition={definitionFromApi(definitions, "overdue_first_response", {
+                      label: "FR SLA overdue / missed",
+                      kind: "fact",
+                      description: "Open backlog past first-response deadline without a recorded first response.",
+                    })}
+                    onDrill={() =>
+                      openLiveTickets("FR SLA overdue (no first response)", "overdue_first_response")
+                    }
+                  />
+                  {(data.snapshot.metrics.assignedToAi ?? 0) > 0 ? (
+                    <LiveBacklogMetricCard
+                      label="Assigned to AI"
+                      value={data.snapshot.metrics.assignedToAi!}
+                      definition={{
+                        label: "Assigned to AI",
+                        kind: "snapshot",
+                        description: "Backlog in Freshdesk Assigned to AI Agent status (9000).",
+                      }}
+                      onDrill={() => openLiveTickets("Assigned to AI", "assigned_to_ai")}
+                    />
+                  ) : null}
+                </div>
+              </section>
+
+              <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
+            </>
+          ) : null}
+
+          <SupportAnalyticsTicketExplorerModal request={explorerRequest} onClose={() => setExplorerRequest(null)} />
+
+          {syncRun.data?.run ? (
+            <p className="text-xs text-muted-foreground">
+              Manual sync: {syncRun.data.run.status} — {syncRun.data.run.message}
+            </p>
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>

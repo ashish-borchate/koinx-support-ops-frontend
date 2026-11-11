@@ -41,4 +41,13 @@ const healthy = buildSchedulerAttention({
 assert.equal(healthy.needsAttention, false);
 assert.equal(healthy.scheduledHealthy, true);
 
+const skipped = buildSchedulerAttention({
+  secretConfigured: true,
+  inOperationalWindow: true,
+  lastScheduledRecorded: true,
+  lastScheduledStatus: "skipped",
+  freshnessWarning: null,
+});
+assert.equal(skipped.scheduledHealthy, false);
+
 console.log("support-analytics-scheduler-diagnostics.test.ts: ok");

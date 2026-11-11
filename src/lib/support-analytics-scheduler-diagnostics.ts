@@ -34,6 +34,7 @@ export function buildSchedulerAttention(input: {
     input.secretConfigured &&
     input.lastScheduledRecorded &&
     !FAILURE_STATUSES.has(String(input.lastScheduledStatus ?? "")) &&
+    input.lastScheduledStatus !== "skipped" &&
     !input.freshnessWarning;
 
   return {

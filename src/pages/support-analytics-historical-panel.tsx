@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Database } from "lucide-react";
-import {
-  DataTableShell,
-  ErrorBlock,
-  LoadingBlock,
-  SectionHeader,
-} from "@/components/bits";
+import { ErrorBlock, LoadingBlock, SectionHeader } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, apiFormData } from "@/lib/api";
 import { toast } from "sonner";
-import { formatCalendarDate, formatDurationHours, formatNumber } from "@/lib/format";
+import { formatCalendarDate, formatNumber } from "@/lib/format";
 import { STALE } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
 import { type DatePresetId, resolveDatePreset } from "@/lib/support-analytics-date-presets";
+import { SupportAnalyticsActivityCalendar } from "@/components/support-analytics/activity-calendar";
+import { HistoricalDayDetailDialog } from "@/components/support-analytics/historical-day-detail-dialog";
 import {
-  SupportAnalyticsActivityCalendar,
-  type CalendarActivityKind,
-} from "@/components/support-analytics/activity-calendar";
+  HistoricalCountCard,
+  HistoricalCsatCard,
+  HistoricalDurationInline,
+  type DurationMetricUi,
+  type CsatMetricUi,
+} from "@/components/support-analytics/historical-metric-card";
+import { HistoricalOperationalInsights } from "@/components/support-analytics/historical-operational-insights";
 import {
   advanceExportJob,
   isExportJobActive,
@@ -33,13 +34,7 @@ import {
 } from "@/components/support-analytics/ticket-explorer-modal";
 import { addDaysIst } from "@/lib/support-analytics-date-presets";
 
-type DurationMetric = {
-  available: boolean;
-  count: number;
-  averageMs: number | null;
-  medianMs: number | null;
-  note: string;
-};
+type DurationMetric = DurationMetricUi & { note?: string; resolutionTimestampPolicy?: string };
 
 type HistoricalOverview = {
   dataSource: string;
@@ -62,8 +57,10 @@ type HistoricalOverview = {
   periodActivity: {
     ticketsCreated: number;
     ticketsResolved: number;
+    netChange: number;
     firstResponseTime: DurationMetric;
-    resolutionTime: DurationMetric & { resolutionTimestampPolicy?: string };
+    resolutionTime: DurationMetric;
+    csat: CsatMetricUi;
   };
   dailyTrend: { date: string; created: number; resolved: number }[];
   snapshotAtImport?: {
@@ -76,11 +73,6 @@ type HistoricalOverview = {
   };
 };
 
-function formatMs(ms: number | null | undefined) {
-  if (ms == null) return "—";
-  return formatDurationHours(ms / 3_600_000);
-}
-
 type AdvancedAnalytics = {
   volume: {
     createdInRange: number;
@@ -89,10 +81,9 @@ type AdvancedAnalytics = {
     dailyTrend: { date: string; created: number; resolved: number; net: number }[];
     weekdayCreated: { weekday: number; created: number }[];
     hourCreatedHeatmap: { hourIst: number; created: number }[];
+    unusualDay?: { date: string; created: number; resolved: number; net: number } | null;
   };
   backlogAging: { label: string; buckets: { bucket: string; count: number }[] };
-  insights: string[];
-  unavailable: Record<string, string>;
 };
 
 export function SupportAnalyticsHistoricalPanel() {
@@ -115,8 +106,8 @@ export function SupportAnalyticsHistoricalPanel() {
   const [importTo, setImportTo] = useState("");
   const [preset, setPreset] = useState<DatePresetId>("last30");
   const [showCustomRange, setShowCustomRange] = useState(false);
-  const [showDailyTable, setShowDailyTable] = useState(false);
   const [manageDataOpen, setManageDataOpen] = useState(false);
+  const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
   const rangeInit = useRef(false);
   const advancingExportRef = useRef(false);
 
@@ -269,7 +260,7 @@ export function SupportAnalyticsHistoricalPanel() {
     setExplorerRequest(null);
   }
 
-  function openDayActivity(date: string, kind: CalendarActivityKind) {
+  function openDayActivity(date: string, kind: "created" | "resolved") {
     if (!appliedFrom || !appliedTo) return;
     setExplorerRequest(historicalDayExplorer(date, kind, appliedFrom, appliedTo));
   }
@@ -320,11 +311,7 @@ export function SupportAnalyticsHistoricalPanel() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Trends and activity from imported Freshdesk exports. Not combined with Live API sync.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">Imported Freshdesk exports only — not combined with Live sync.</p>
         <Button type="button" variant="outline" size="sm" onClick={() => setManageDataOpen(true)}>
           <Database className="mr-2 h-4 w-4" />
           Manage Historical Data
@@ -337,11 +324,7 @@ export function SupportAnalyticsHistoricalPanel() {
       </div>
 
       <section className="rounded-lg border border-border bg-card px-3 py-3">
-        <SectionHeader
-          className="mb-2"
-          title="Reporting period"
-          description="Filters the metrics below to tickets created or resolved on these IST dates. Does not download or import new data."
-        />
+        <SectionHeader className="mb-2" title="Reporting period" />
         <div className="flex flex-wrap items-end gap-2">
           <PresetGroup preset={preset} onSelect={selectPreset} />
           {showCustomRange || preset === "custom" ? (
@@ -365,12 +348,7 @@ export function SupportAnalyticsHistoricalPanel() {
       </section>
 
       {data?.coverage ? (
-        <ImportedDataCoverageBlock
-          coverage={data.coverage}
-          importedSpan={importedSpan}
-          reportingFrom={appliedFrom}
-          reportingTo={appliedTo}
-        />
+        <ImportedDataCoverageBlock coverage={data.coverage} importedSpan={importedSpan} />
       ) : null}
 
       {overview.isLoading ? <LoadingBlock label="Loading historical analytics…" /> : null}
@@ -378,110 +356,60 @@ export function SupportAnalyticsHistoricalPanel() {
 
       {data ? (
         <>
-          <SectionHeader
-            title="Key metrics"
-            description="Counts and timing for the selected reporting period."
-          />
+          <SectionHeader title="Key metrics" className="mt-2" />
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              title="Tickets created"
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <HistoricalCountCard
+              label="Created"
               value={data.periodActivity.ticketsCreated}
-              onDrill={() => openPeriodActivity("created")}
+              onClick={() => openPeriodActivity("created")}
             />
-            <StatCard
-              title="Tickets resolved"
+            <HistoricalCountCard
+              label="Resolved"
               value={data.periodActivity.ticketsResolved}
-              onDrill={() => openPeriodActivity("resolved")}
+              onClick={() => openPeriodActivity("resolved")}
+            />
+            <HistoricalCountCard
+              label="Net change"
+              value={data.periodActivity.netChange ?? data.periodActivity.ticketsCreated - data.periodActivity.ticketsResolved}
+              tone={
+                (data.periodActivity.netChange ?? 0) > 0
+                  ? "negative"
+                  : (data.periodActivity.netChange ?? 0) < 0
+                    ? "positive"
+                    : "neutral"
+              }
+              hint="Created minus resolved in the reporting period."
+            />
+            <HistoricalDurationInline
+              label="First response"
+              metric={data.periodActivity.firstResponseTime}
+              sublabel="Tickets created in period"
+            />
+            <HistoricalDurationInline
+              label="Resolution time"
+              metric={data.periodActivity.resolutionTime}
+              sublabel="Tickets resolved in period"
             />
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TimingCard title="First response time" metric={data.periodActivity.firstResponseTime} />
-            <TimingCard title="Resolution time" metric={data.periodActivity.resolutionTime} />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <HistoricalCsatCard csat={data.periodActivity.csat} />
           </div>
 
           {dailyForCalendar.length > 0 && appliedFrom && appliedTo ? (
             <>
-              <SectionHeader
-                title="Daily activity"
-                description="Created and resolved counts per day within the reporting period."
-                action={
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowDailyTable((v) => !v)}>
-                    {showDailyTable ? "Show calendar" : "Show table"}
-                  </Button>
-                }
+              <SectionHeader title="Daily activity" className="mt-2" />
+              <SupportAnalyticsActivityCalendar
+                from={appliedFrom}
+                to={appliedTo}
+                daily={dailyForCalendar}
+                selectedDate={dayDetailDate}
+                onDayClick={(date) => setDayDetailDate(date)}
               />
-              {showDailyTable ? (
-                <DataTableShell>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="px-3 py-2">Date (IST)</th>
-                        <th className="px-3 py-2 text-right">Created</th>
-                        <th className="px-3 py-2 text-right">Resolved</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyForCalendar.map((row) => (
-                        <tr key={row.date} className="border-b border-border/60">
-                          <td className="px-3 py-2">{formatCalendarDate(row.date)}</td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              disabled={row.created === 0}
-                              className="tabular-nums text-sky-700 hover:underline disabled:text-muted-foreground disabled:no-underline dark:text-sky-300"
-                              onClick={() => openDayActivity(row.date, "created")}
-                            >
-                              {row.created}
-                            </button>
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              disabled={row.resolved === 0}
-                              className="tabular-nums text-emerald-700 hover:underline disabled:text-muted-foreground disabled:no-underline dark:text-emerald-300"
-                              onClick={() => openDayActivity(row.date, "resolved")}
-                            >
-                              {row.resolved}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </DataTableShell>
-              ) : (
-                <SupportAnalyticsActivityCalendar
-                  from={appliedFrom}
-                  to={appliedTo}
-                  daily={dailyForCalendar}
-                  selectedDate={null}
-                  activityKind="created"
-                  onPick={(date, kind) => {
-                    if (date) openDayActivity(date, kind);
-                  }}
-                />
-              )}
             </>
           ) : null}
 
-          {advanced.data ? (
-            <>
-              <SectionHeader
-                title="Volume & trends"
-                description="Creation patterns and net change use the reporting period. Open ticket aging uses the latest import snapshot."
-              />
-              <AdvancedSummaryGrid advanced={advanced.data} />
-              {advanced.data.insights.length ? (
-                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                  {advanced.data.insights.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          ) : null}
+          {advanced.data ? <HistoricalOperationalInsights advanced={advanced.data} /> : null}
 
         </>
       ) : null}
@@ -513,6 +441,22 @@ export function SupportAnalyticsHistoricalPanel() {
           } catch (e) {
             toast.error(e instanceof Error ? e.message : "Retry failed");
           }
+        }}
+      />
+
+      <HistoricalDayDetailDialog
+        dateIst={dayDetailDate}
+        open={dayDetailDate != null}
+        onOpenChange={(open) => {
+          if (!open) setDayDetailDate(null);
+        }}
+        onExploreCreated={(date) => {
+          setDayDetailDate(null);
+          openDayActivity(date, "created");
+        }}
+        onExploreResolved={(date) => {
+          setDayDetailDate(null);
+          openDayActivity(date, "resolved");
         }}
       />
 
@@ -548,70 +492,6 @@ function PresetGroup({ preset, onSelect }: { preset: DatePresetId; onSelect: (p:
           {p.label}
         </Button>
       ))}
-    </div>
-  );
-}
-
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-function AdvancedSummaryGrid({ advanced }: { advanced: AdvancedAnalytics }) {
-  const maxHour = Math.max(1, ...advanced.volume.hourCreatedHeatmap.map((h) => h.created));
-  const maxWeekday = Math.max(1, ...advanced.volume.weekdayCreated.map((w) => w.created));
-  return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <StatCard title="Net change (period)" value={advanced.volume.netChange} />
-      <div className="rounded-xl border border-border bg-card p-4 text-sm sm:col-span-2">
-        <p className="text-xs font-medium uppercase text-muted-foreground">Creation patterns (IST, selected period)</p>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <div className="min-w-[8rem] flex-1">
-            <p className="mb-1 text-[10px] text-muted-foreground">By weekday</p>
-            <div className="flex items-end gap-1">
-              {advanced.volume.weekdayCreated.map((w) => (
-                <div
-                  key={w.weekday}
-                  title={`${WEEKDAY_LABELS[w.weekday - 1]} — ${w.created} created`}
-                  className="flex min-w-[1.4rem] flex-col items-center gap-0.5"
-                >
-                  <div
-                    className="w-full min-h-[4px] rounded-sm bg-sky-500/70"
-                    style={{ height: `${8 + (w.created / maxWeekday) * 36}px` }}
-                  />
-                  <span className="text-[9px] text-muted-foreground">{WEEKDAY_LABELS[w.weekday - 1]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="min-w-[12rem] flex-[2]">
-            <p className="mb-1 text-[10px] text-muted-foreground">By hour</p>
-            <div className="flex flex-wrap gap-0.5">
-              {advanced.volume.hourCreatedHeatmap.map((h) => (
-                <div
-                  key={h.hourIst}
-                  title={`${h.hourIst}:00 — ${h.created} created`}
-                  className="flex min-w-[1.05rem] flex-col items-center justify-end rounded-sm bg-sky-500/20 text-[9px] tabular-nums"
-                  style={{
-                    opacity: 0.25 + (h.created / maxHour) * 0.75,
-                    height: `${16 + (h.created / maxHour) * 28}px`,
-                  }}
-                >
-                  {h.created > 0 ? h.created : ""}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="rounded-xl border border-border bg-card p-4 text-sm sm:col-span-3">
-        <p className="text-xs font-medium uppercase text-muted-foreground">Open ticket aging (import snapshot)</p>
-        <p className="mt-1 text-xs text-muted-foreground">{advanced.backlogAging.label}</p>
-        <p className="mt-2 flex flex-wrap gap-2 text-xs">
-          {advanced.backlogAging.buckets.map((b) => (
-            <span key={b.bucket} className="rounded-md bg-muted px-2 py-1">
-              {b.bucket}: {formatNumber(b.count)}
-            </span>
-          ))}
-        </p>
-      </div>
     </div>
   );
 }
@@ -652,13 +532,9 @@ function DateFieldInput({ label, value, onChange }: { label: string; value: stri
 function ImportedDataCoverageBlock({
   coverage,
   importedSpan,
-  reportingFrom,
-  reportingTo,
 }: {
   coverage: HistoricalOverview["coverage"];
   importedSpan: { from: string; to: string } | null;
-  reportingFrom: string;
-  reportingTo: string;
 }) {
   return (
     <div className="rounded-lg border border-dashed border-border bg-muted/15 px-3 py-3 text-sm">
@@ -674,41 +550,6 @@ function ImportedDataCoverageBlock({
           </>
         ) : null}
       </p>
-      {reportingFrom && reportingTo && importedSpan ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Reporting period {formatCalendarDate(reportingFrom)} – {formatCalendarDate(reportingTo)} is a view over this
-          stored data. To add tickets from other dates, use Manage Historical Data.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function StatCard({ title, value, onDrill }: { title: string; value: number; onDrill?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onDrill}
-      className="rounded-xl border border-border bg-card p-4 text-left hover:border-primary/40"
-    >
-      <p className="text-xs font-medium uppercase text-muted-foreground">{title}</p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums">{formatNumber(value)}</p>
-    </button>
-  );
-}
-
-function TimingCard({ title, metric }: { title: string; metric: DurationMetric }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs font-medium uppercase text-muted-foreground">{title}</p>
-      {metric.available ? (
-        <p className="mt-2 text-lg font-semibold">
-          Avg {formatMs(metric.averageMs)} · Median {formatMs(metric.medianMs)} (n={metric.count})
-        </p>
-      ) : (
-        <p className="mt-2 text-muted-foreground">—</p>
-      )}
-      <p className="mt-1 text-xs text-muted-foreground">{metric.note}</p>
     </div>
   );
 }

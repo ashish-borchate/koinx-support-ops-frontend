@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { SectionHeader, LoadingBlock, ErrorBlock } from "@/components/bits";
-import { formatNumber, formatWhen } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { api } from "@/lib/api";
 import { STALE } from "@/lib/query-client";
 import type {
@@ -43,11 +43,11 @@ function metricButton(
       type="button"
       onClick={onClick}
       disabled={value === 0}
-      className="rounded-lg border border-border bg-card px-3 py-2 text-left transition hover:border-primary/40 disabled:cursor-default disabled:opacity-60"
+      className="min-h-[4.5rem] rounded-xl border border-border bg-card px-3 py-2.5 text-left transition hover:border-primary/40 disabled:cursor-default disabled:opacity-60"
     >
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
       <p
-        className={`mt-1 text-xl font-semibold tabular-nums ${
+        className={`mt-1.5 text-2xl font-semibold tabular-nums leading-none ${
           tone === "warn" ? "text-amber-700 dark:text-amber-400" : "text-foreground"
         }`}
       >
@@ -171,15 +171,7 @@ export function SupportAnalyticsLiveAgentWorkload({
 
   return (
     <section className="space-y-3">
-      <SectionHeader
-        title="Current Agent Workload"
-        description="Live-synced ticket ownership. Independent of the reporting period above."
-      />
-      {data?.lastSuccessfulTicketSyncAt ? (
-        <p className="text-xs text-muted-foreground">
-          Last successful Live sync: {formatWhen(data.lastSuccessfulTicketSyncAt)}
-        </p>
-      ) : null}
+      <SectionHeader title="Current agent workload" />
 
       {workload.isLoading ? <LoadingBlock label="Loading agent workload…" /> : null}
       {workload.isError ? <ErrorBlock message="Could not load live agent workload." /> : null}
@@ -210,26 +202,24 @@ export function SupportAnalyticsLiveAgentWorkload({
             )}
           </div>
 
-          <p className="text-xs text-muted-foreground">{data.note}</p>
-
           {data.agents.length === 0 ? (
             <p className="text-sm text-muted-foreground">No assigned backlog tickets in the Live store.</p>
           ) : (
-            <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+            <ul className="divide-y divide-border rounded-xl border border-border bg-card">
               {data.agents.map((a) => (
                 <li key={String(a.agentFreshdeskId)} className="px-3 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <button
                       type="button"
-                      className="text-sm font-medium text-left hover:underline"
+                      className="text-left text-sm font-medium hover:underline"
                       onClick={() => openAgentExplorer(a, "open")}
                     >
                       {a.agentName}
                       <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
-                        ({formatNumber(a.backlog)} backlog)
+                        {formatNumber(a.backlog)} backlog
                       </span>
                     </button>
-                    <div className="flex flex-wrap gap-2 text-xs">
+                    <div className="flex flex-wrap gap-1.5 text-xs">
                       <CountChip
                         label="Open"
                         value={a.statusOpen}
@@ -253,7 +243,7 @@ export function SupportAnalyticsLiveAgentWorkload({
                       />
                     </div>
                   </div>
-                  <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
                       className="h-full bg-sky-500/80"
                       style={{ width: `${(a.statusOpen / maxBacklog) * 100}%` }}
@@ -271,6 +261,15 @@ export function SupportAnalyticsLiveAgentWorkload({
               ))}
             </ul>
           )}
+
+          {data.note ? (
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer list-none underline-offset-2 hover:underline [&::-webkit-details-marker]:hidden">
+                Coverage note
+              </summary>
+              <p className="mt-1 leading-relaxed">{data.note}</p>
+            </details>
+          ) : null}
         </>
       ) : null}
     </section>

@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { AlertCircle, ChevronDown, ChevronRight, Server, Workflow } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, PauseCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { buildSchedulerAttention } from "@/lib/support-analytics-scheduler-diagnostics";
+import { cn } from "@/lib/utils";
 
 type FreshnessDisplay = {
   lastSuccessfulSyncLabelIst?: string | null;
@@ -9,7 +10,10 @@ type FreshnessDisplay = {
   lastSyncType?: string | null;
   nextScheduledLabelIst?: string | null;
   latestScheduledLabelIst?: string | null;
+  latestScheduledFinishedLabelIst?: string | null;
   latestScheduledStatus?: string | null;
+  latestScheduledMessage?: string | null;
+  latestScheduledSkipReason?: string | null;
   schedulerFreshnessWarning?: string | null;
   schedulerSecretConfiguredOnServer?: boolean;
 };
@@ -17,7 +21,7 @@ type FreshnessDisplay = {
 function syncTriggerLabel(trigger?: string | null) {
   switch (trigger) {
     case "scheduled":
-      return "Scheduled";
+      return "Automatic";
     case "manual":
       return "Manual";
     case "external":
@@ -44,23 +48,61 @@ function scheduledAttemptLabel(status?: string | null) {
   }
 }
 
+function deriveCompactSyncTone(input: {
+  attention: ReturnType<typeof buildSchedulerAttention>;
+  inOperationalWindow: boolean;
+  latestScheduledStatus?: string | null;
+}) {
+  const status = input.latestScheduledStatus;
+  if (input.attention.needsAttention || status === "failed") {
+    return "issue" as const;
+  }
+  if (status === "skipped") {
+    return "issue" as const;
+  }
+  if (!input.inOperationalWindow) {
+    return "quiet" as const;
+  }
+  if (status === "success" || status === "partial") {
+    return "active" as const;
+  }
+  if (status === "running") {
+    return "active" as const;
+  }
+  if (!input.attention.scheduledHealthy && input.inOperationalWindow) {
+    return "issue" as const;
+  }
+  return "unknown" as const;
+}
+
 export function SupportAnalyticsSchedulerStatusPanel({
   display,
   inOperationalWindow,
+  ticketsStored,
+  children,
 }: {
   display?: FreshnessDisplay | null;
   inOperationalWindow?: boolean;
+  ticketsStored?: number;
+  children?: ReactNode;
 }) {
-  const [showTechnical, setShowTechnical] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   if (!display) return null;
 
+  const inWindow = Boolean(inOperationalWindow);
   const attention = buildSchedulerAttention({
     secretConfigured: display.schedulerSecretConfiguredOnServer !== false,
-    inOperationalWindow: Boolean(inOperationalWindow),
+    inOperationalWindow: inWindow,
     lastScheduledRecorded: Boolean(display.latestScheduledLabelIst),
     lastScheduledStatus: display.latestScheduledStatus,
     freshnessWarning: display.schedulerFreshnessWarning,
+  });
+
+  const tone = deriveCompactSyncTone({
+    attention,
+    inOperationalWindow: inWindow,
+    latestScheduledStatus: display.latestScheduledStatus,
   });
 
   const lastSyncTrigger = syncTriggerLabel(
@@ -68,83 +110,149 @@ export function SupportAnalyticsSchedulerStatusPanel({
   );
   const lastAuto =
     display.latestScheduledLabelIst != null
-      ? `${display.latestScheduledLabelIst} IST · ${scheduledAttemptLabel(display.latestScheduledStatus)}`
+      ? `${display.latestScheduledLabelIst} · ${scheduledAttemptLabel(display.latestScheduledStatus)}`
       : "Not recorded";
 
-  return (
-    <div className="space-y-2">
-      {attention.needsAttention ? (
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/8 px-3 py-2.5 text-sm">
-          <div className="flex gap-2">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
-            <div className="min-w-0 flex-1 space-y-2">
-              <div>
-                <p className="font-medium text-foreground">Scheduled sync needs attention</p>
-                <p className="text-xs text-muted-foreground">
-                  Automatic Live sync is not currently configured correctly.
-                </p>
-              </div>
-              {attention.githubDetail ? (
-                <div className="flex gap-2 text-xs leading-snug">
-                  <Workflow className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <p>
-                    <span className="font-medium text-foreground">GitHub Actions:</span> {attention.githubDetail}
-                  </p>
-                </div>
-              ) : null}
-              {attention.backendDetail ? (
-                <div className="flex gap-2 text-xs leading-snug">
-                  <Server className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <p>
-                    <span className="font-medium text-foreground">Backend configuration:</span>{" "}
-                    {attention.backendDetail}
-                  </p>
-                </div>
-              ) : null}
-              {attention.technicalDetail ? (
-                <div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-1 text-xs text-muted-foreground"
-                    onClick={() => setShowTechnical((v) => !v)}
-                  >
-                    {showTechnical ? (
-                      <ChevronDown className="mr-1 h-3 w-3" />
-                    ) : (
-                      <ChevronRight className="mr-1 h-3 w-3" />
-                    )}
-                    Technical details
-                  </Button>
-                  {showTechnical ? (
-                    <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{attention.technicalDetail}</p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+  const statusLabel =
+    tone === "active"
+      ? "Automatic sync active"
+      : tone === "quiet"
+        ? "Scheduled sync paused (quiet hours)"
+        : tone === "issue"
+          ? "Sync issue"
+          : "Sync status";
 
-      <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-border bg-card px-3 py-2 text-xs">
-        <p>
-          <span className="text-muted-foreground">Last successful sync:</span>{" "}
-          <span className="font-medium text-foreground">{display.lastSuccessfulSyncLabelIst || "—"}</span>{" "}
-          <span className="text-muted-foreground">({lastSyncTrigger})</span>
-        </p>
-        <p>
-          <span className="text-muted-foreground">Last automatic attempt:</span>{" "}
-          <span className="font-medium text-foreground">{lastAuto}</span>
-        </p>
-        <p>
-          <span className="text-muted-foreground">Next expected slot:</span>{" "}
-          <span className="font-medium text-foreground">
-            {display.nextScheduledLabelIst ? `${display.nextScheduledLabelIst} IST` : "—"}
+  const StatusIcon =
+    tone === "active"
+      ? CheckCircle2
+      : tone === "quiet"
+        ? PauseCircle
+        : tone === "issue"
+          ? AlertCircle
+          : PauseCircle;
+
+  const iconClass =
+    tone === "active"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "quiet"
+        ? "text-muted-foreground"
+        : tone === "issue"
+          ? "text-amber-700 dark:text-amber-400"
+          : "text-muted-foreground";
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border bg-card/80 px-3 py-2.5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+            tone === "issue" && "border-amber-500/40 bg-amber-500/10 text-foreground",
+            tone === "active" && "border-border bg-muted/40 text-foreground",
+            tone === "quiet" && "border-border bg-muted/20 text-muted-foreground",
+            tone === "unknown" && "border-border bg-muted/20 text-muted-foreground",
+          )}
+        >
+          <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", iconClass)} aria-hidden />
+          {statusLabel}
+        </div>
+
+        {typeof ticketsStored === "number" ? (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {ticketsStored.toLocaleString()} tickets in Live store
           </span>
-          <span className="ml-1 text-muted-foreground">(expected, not health check)</span>
-        </p>
+        ) : null}
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+          aria-expanded={detailsOpen}
+          onClick={() => setDetailsOpen((v) => !v)}
+        >
+          Sync details
+          {detailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </Button>
       </div>
+
+      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
+      </div>
+
+      {detailsOpen ? (
+        <SyncDetailsPanel>
+          <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+            <SyncDetailRow label="Last successful sync">
+              {display.lastSuccessfulSyncLabelIst || "—"}
+              {lastSyncTrigger !== "—" ? (
+                <span className="text-muted-foreground"> ({lastSyncTrigger})</span>
+              ) : null}
+            </SyncDetailRow>
+            <SyncDetailRow label="Last automatic attempt">
+              {lastAuto}
+              {display.latestScheduledFinishedLabelIst ? (
+                <span className="block text-muted-foreground">
+                  Finished {display.latestScheduledFinishedLabelIst} IST
+                </span>
+              ) : null}
+            </SyncDetailRow>
+            <SyncDetailRow label="Next expected slot">
+              {display.nextScheduledLabelIst ? `${display.nextScheduledLabelIst} IST` : "—"}
+              <span className="block text-muted-foreground">Expected schedule, not a health check</span>
+            </SyncDetailRow>
+          </dl>
+
+          {(attention.githubDetail || attention.backendDetail) && (
+            <SyncDetailsSubsection title="GitHub Actions & scheduling">
+              {attention.githubDetail ? <p>{attention.githubDetail}</p> : null}
+              {attention.backendDetail ? <p className="mt-1">{attention.backendDetail}</p> : null}
+            </SyncDetailsSubsection>
+          )}
+
+          {display.latestScheduledMessage || display.latestScheduledSkipReason ? (
+            <SyncDetailsSubsection title="Latest attempt details">
+              {display.latestScheduledMessage ? <p>{display.latestScheduledMessage}</p> : null}
+              {display.latestScheduledSkipReason ? (
+                <p className="mt-1 text-muted-foreground">Reason: {display.latestScheduledSkipReason}</p>
+              ) : null}
+            </SyncDetailsSubsection>
+          ) : null}
+
+          <SyncDetailsSubsection title="Live data coverage">
+            <ul className="list-inside list-disc space-y-1 text-muted-foreground">
+              <li>Dashboard metrics use tickets synced into the Support Analytics store.</li>
+              <li>Backlog counts reflect the latest stored snapshot.</li>
+              <li>Period metrics use stored tickets for the dates you select.</li>
+            </ul>
+          </SyncDetailsSubsection>
+        </SyncDetailsPanel>
+      ) : null}
+    </div>
+  );
+}
+
+function SyncDetailsPanel({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("w-full rounded-lg border border-border bg-muted/20 px-3 py-2.5", className)}>
+      {children}
+    </div>
+  );
+}
+
+function SyncDetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-medium text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+function SyncDetailsSubsection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-3 border-t border-border/80 pt-2">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+      <div className="mt-1 text-xs leading-relaxed text-foreground">{children}</div>
     </div>
   );
 }

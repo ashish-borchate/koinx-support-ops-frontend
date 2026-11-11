@@ -12,15 +12,13 @@ export function SupportAnalyticsActivityCalendar({
   to,
   daily,
   selectedDate,
-  activityKind,
-  onPick,
+  onDayClick,
 }: {
   from: string;
   to: string;
   daily: DayCell[];
   selectedDate: string | null;
-  activityKind: CalendarActivityKind;
-  onPick: (date: string | null, kind: CalendarActivityKind) => void;
+  onDayClick: (date: string) => void;
 }) {
   const map = useMemo(() => new Map(daily.map((d) => [d.date, d])), [daily]);
   const dates = useMemo(() => eachDateKey(from, to), [from, to]);
@@ -28,13 +26,16 @@ export function SupportAnalyticsActivityCalendar({
 
   return (
     <div className="space-y-2">
-      <section className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-2 rounded-sm bg-sky-500/80" /> Created — click count
+      <section className="flex flex-wrap gap-4 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-sky-500" />
+          <strong className="text-foreground">C</strong> Created
         </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-2 rounded-sm bg-emerald-500/80" /> Resolved — click count
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <strong className="text-foreground">R</strong> Resolved
         </span>
+        <span className="text-muted-foreground/80">Click a day for detail</span>
       </section>
       <div className="grid grid-cols-7 gap-1 sm:grid-cols-10 md:grid-cols-14">
         {dates.map((date) => {
@@ -42,46 +43,43 @@ export function SupportAnalyticsActivityCalendar({
           const intensity = Math.max(row.created, row.resolved) / max;
           const inRange = date >= from && date <= to;
           const active = selectedDate === date;
+          const hasActivity = row.created > 0 || row.resolved > 0;
           return (
-            <div
+            <button
               key={date}
+              type="button"
+              disabled={!inRange || !hasActivity}
+              onClick={() => onDayClick(date)}
               className={cn(
-                "flex min-h-[3.25rem] flex-col items-center justify-center rounded-md border px-0.5 py-1 text-[10px] transition",
-                inRange ? "border-border" : "border-transparent opacity-40",
+                "flex min-h-[4rem] flex-col items-center justify-center rounded-md border px-0.5 py-1 text-[10px] transition",
+                inRange ? "border-border" : "border-transparent opacity-30",
+                hasActivity ? "hover:border-primary/50" : "opacity-50",
                 active ? "ring-2 ring-primary" : "",
               )}
               style={{
-                backgroundColor: `color-mix(in srgb, rgb(14 165 233) ${Math.round(intensity * 55)}%, transparent)`,
+                backgroundColor: hasActivity
+                  ? `color-mix(in srgb, rgb(14 165 233) ${Math.round(intensity * 50)}%, transparent)`
+                  : undefined,
               }}
             >
-              <span className="tabular-nums text-foreground">{date.slice(8)}</span>
-              <button
-                type="button"
-                title={`${date} — created ${row.created}`}
-                onClick={() => {
-                  if (row.created > 0) onPick(date, "created");
-                }}
+              <span className="tabular-nums font-medium text-foreground">{date.slice(8)}</span>
+              <span
                 className={cn(
-                  "tabular-nums text-sky-700 hover:underline dark:text-sky-300",
-                  active && activityKind === "created" ? "font-semibold underline" : "",
+                  "mt-0.5 tabular-nums leading-tight",
+                  row.created > 0 ? "text-sky-700 dark:text-sky-300" : "text-muted-foreground/40",
                 )}
               >
-                +{formatNumber(row.created)}
-              </button>
-              <button
-                type="button"
-                title={`${date} — resolved ${row.resolved}`}
-                onClick={() => {
-                  if (row.resolved > 0) onPick(date, "resolved");
-                }}
+                C {formatNumber(row.created)}
+              </span>
+              <span
                 className={cn(
-                  "tabular-nums text-emerald-700 hover:underline dark:text-emerald-300",
-                  active && activityKind === "resolved" ? "font-semibold underline" : "",
+                  "tabular-nums leading-tight",
+                  row.resolved > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground/40",
                 )}
               >
-                ✓{formatNumber(row.resolved)}
-              </button>
-            </div>
+                R {formatNumber(row.resolved)}
+              </span>
+            </button>
           );
         })}
       </div>

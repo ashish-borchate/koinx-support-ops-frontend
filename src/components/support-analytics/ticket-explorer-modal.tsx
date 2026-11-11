@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Empty, ErrorBlock, LoadingBlock } from "@/components/bits";
 import { api } from "@/lib/api";
 import { formatCalendarDate, formatNumber, formatWhen } from "@/lib/format";
+import { STALE } from "@/lib/query-client";
 
 export type SupportAnalyticsTicketRow = {
   freshdeskId: number;
@@ -41,6 +42,8 @@ export type SupportAnalyticsTicketExplorerRequest = {
   exportFileName?: string;
   filterTabs?: TicketExplorerFilterTab[];
   initialTabKey?: string;
+  /** Live explorer: pre-select group filter (`0` = unassigned, `all` = every group). */
+  initialGroupFreshdeskId?: string;
 };
 
 type TicketSortField = "created" | "due" | "updated";
@@ -87,6 +90,7 @@ function matchesSearch(t: SupportAnalyticsTicketRow, needle: string) {
     ticketLabel(t),
     t.subject ?? "",
     t.assignedAgentName ?? "",
+    t.groupName ?? "",
     t.statusLabel,
     t.priorityLabel,
   ]
@@ -117,6 +121,7 @@ function toCsv(rows: SupportAnalyticsTicketRow[], includeResolved: boolean) {
     "Ticket No",
     "Subject",
     "Assignee",
+    ...(includeResolved ? [] : ["Group"]),
     "Status",
     "Created (IST)",
     ...(includeResolved ? ["Resolved (IST)"] : []),
@@ -129,6 +134,7 @@ function toCsv(rows: SupportAnalyticsTicketRow[], includeResolved: boolean) {
       ticketLabel(t),
       (t.subject ?? "").replace(/"/g, '""'),
       (t.assignedAgentName ?? "").replace(/"/g, '""'),
+      ...(includeResolved ? [] : [(t.groupName ?? "").replace(/"/g, '""')]),
       t.statusLabel,
       t.createdAt ? formatWhen(t.createdAt) : "",
       ...(includeResolved ? [t.resolvedAt ? formatWhen(t.resolvedAt) : ""] : []),
@@ -148,6 +154,15 @@ const SORT_FIELD_LABEL: Record<TicketSortField, string> = {
   updated: "Last modified",
 };
 
+function tabGroupScope(params: Record<string, string>): string {
+  return params.groupFreshdeskId ?? "all";
+}
+
+/** Tab badge counts are computed for the drill context's group filter; hide when the user changes group. */
+function liveWorkloadTabCountsReliable(tab: TicketExplorerFilterTab, groupFilter: string): boolean {
+  return tabGroupScope(tab.queryParams) === groupFilter;
+}
+
 export function SupportAnalyticsTicketExplorerModal({
   request,
   onClose,
@@ -160,10 +175,12 @@ export function SupportAnalyticsTicketExplorerModal({
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
   const [sortField, setSortField] = useState<TicketSortField>("created");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [groupFilter, setGroupFilter] = useState<string>("all");
 
   useEffect(() => {
     if (!request) {
       setActiveTabKey(null);
+      setGroupFilter("all");
       return;
     }
     const tabs = request.filterTabs;
@@ -179,6 +196,11 @@ export function SupportAnalyticsTicketExplorerModal({
     setPage(0);
     setSortField("created");
     setSortDirection("desc");
+    const seed =
+      request.initialGroupFreshdeskId ??
+      request.queryParams.groupFreshdeskId ??
+      request.filterTabs?.[0]?.queryParams.groupFreshdeskId;
+    setGroupFilter(seed ?? "all");
   }, [request]);
 
   const activeQueryParams = useMemo(() => {
@@ -190,8 +212,36 @@ export function SupportAnalyticsTicketExplorerModal({
     return request.queryParams;
   }, [request, activeTabKey]);
 
+  const fetchQueryParams = useMemo(() => {
+    if (!activeQueryParams) return null;
+    const merged = { ...activeQueryParams };
+    if (request?.source === "live") {
+      if (groupFilter === "all") {
+        delete merged.groupFreshdeskId;
+      } else {
+        merged.groupFreshdeskId = groupFilter;
+      }
+    }
+    return merged;
+  }, [activeQueryParams, groupFilter, request?.source]);
+
+  type LiveGroupCatalog = {
+    groups: { groupFreshdeskId: number | null; groupName: string }[];
+  };
+
+  const groupsCatalog = useQuery({
+    queryKey: ["support-analytics", "live-groups"],
+    enabled: request?.source === "live",
+    queryFn: () => api<LiveGroupCatalog>("/api/support-analytics/live/groups"),
+    staleTime: STALE.operational,
+  });
+
   const activeTab = request?.filterTabs?.find((t) => t.key === activeTabKey) ?? null;
   const showResolvedColumn = request?.source === "historical";
+  const tabCountsMatchGroupFilter =
+    request?.source !== "live" ||
+    !request.filterTabs?.length ||
+    request.filterTabs.every((t) => liveWorkloadTabCountsReliable(t, groupFilter));
 
   const endpoint =
     request?.source === "historical"
@@ -199,12 +249,12 @@ export function SupportAnalyticsTicketExplorerModal({
       : "/api/support-analytics/tickets";
 
   const ticketsQuery = useQuery({
-    queryKey: ["support-analytics", "ticket-explorer", request?.source, activeQueryParams],
-    enabled: request != null && activeQueryParams != null,
+    queryKey: ["support-analytics", "ticket-explorer", request?.source, fetchQueryParams],
+    enabled: request != null && fetchQueryParams != null,
     queryFn: () => {
       const params = new URLSearchParams({
-        ...activeQueryParams!,
-        limit: activeQueryParams!.limit ?? "500",
+        ...fetchQueryParams!,
+        limit: fetchQueryParams!.limit ?? "500",
       });
       return api<{ tickets: SupportAnalyticsTicketRow[] }>(`${endpoint}?${params}`);
     },
@@ -270,34 +320,71 @@ export function SupportAnalyticsTicketExplorerModal({
                 role="tablist"
                 aria-label="Workload filters"
               >
-                {request.filterTabs.map((tab) => (
-                  <Button
-                    key={tab.key}
-                    type="button"
-                    size="sm"
-                    variant={tab.key === activeTabKey ? "default" : "outline"}
-                    className="h-8 text-xs"
-                    role="tab"
-                    aria-selected={tab.key === activeTabKey}
-                    onClick={() => {
-                      setActiveTabKey(tab.key);
-                      setPage(0);
-                      setSearch("");
-                    }}
-                  >
-                    {tab.label} ({formatNumber(tab.count)})
-                  </Button>
-                ))}
+                {request.filterTabs.map((tab) => {
+                  const showCount =
+                    request.source !== "live" || liveWorkloadTabCountsReliable(tab, groupFilter);
+                  return (
+                    <Button
+                      key={tab.key}
+                      type="button"
+                      size="sm"
+                      variant={tab.key === activeTabKey ? "default" : "outline"}
+                      className="h-8 text-xs"
+                      role="tab"
+                      aria-selected={tab.key === activeTabKey}
+                      title={
+                        showCount ? undefined : "Count applies to the group filter from when you opened this view"
+                      }
+                      onClick={() => {
+                        setActiveTabKey(tab.key);
+                        setPage(0);
+                        setSearch("");
+                      }}
+                    >
+                      {showCount ? `${tab.label} (${formatNumber(tab.count)})` : tab.label}
+                    </Button>
+                  );
+                })}
               </div>
             ) : null}
 
             {request.filterTabs?.length ? (
               <p className="shrink-0 bg-background px-4 pt-1 text-[11px] text-muted-foreground">
+                {!tabCountsMatchGroupFilter ? (
+                  <span className="block">
+                    Status tab counts match the group you opened from; badges are hidden after you change the group
+                    filter. The ticket list below reflects your current filters.
+                  </span>
+                ) : null}
                 Overdue and High/Urgent overlap status tabs — tickets are not double-counted in backlog totals.
               </p>
             ) : null}
 
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2">
+              {request.source === "live" ? (
+                <Select
+                  value={groupFilter}
+                  onValueChange={(value) => {
+                    setGroupFilter(value);
+                    setPage(0);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[11rem]" aria-label="Filter by Freshdesk group">
+                    <SelectValue placeholder="All groups" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All groups</SelectItem>
+                    <SelectItem value="0">Unassigned group</SelectItem>
+                    {(groupsCatalog.data?.groups ?? [])
+                      .filter((g) => g.groupFreshdeskId != null)
+                      .map((g) => (
+                        <SelectItem key={String(g.groupFreshdeskId)} value={String(g.groupFreshdeskId)}>
+                          {g.groupName}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <div className="relative min-w-[12rem] flex-1">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -373,6 +460,7 @@ export function SupportAnalyticsTicketExplorerModal({
                       <colgroup>
                         <col className="w-[5.25rem]" />
                         <col />
+                        {!showResolvedColumn ? <col className="w-[6.25rem]" /> : null}
                         <col className="w-[6.5rem]" />
                         <col className="w-[6.75rem]" />
                         <col className="w-[8.25rem]" />
@@ -383,6 +471,7 @@ export function SupportAnalyticsTicketExplorerModal({
                           <th className="px-2 py-2 font-medium">Ticket No</th>
                           <th className="px-2 py-2 font-medium">Subject</th>
                           <th className="px-2 py-2 font-medium">Assignee</th>
+                          {!showResolvedColumn ? <th className="px-2 py-2 font-medium">Group</th> : null}
                           <th className="px-2 py-2 font-medium">Status</th>
                           <th className="px-2 py-2 font-medium">Created</th>
                           {showResolvedColumn ? <th className="px-2 py-2 font-medium">Resolved</th> : null}
@@ -395,6 +484,7 @@ export function SupportAnalyticsTicketExplorerModal({
                       <colgroup>
                         <col className="w-[5.25rem]" />
                         <col />
+                        {!showResolvedColumn ? <col className="w-[6.25rem]" /> : null}
                         <col className="w-[6.5rem]" />
                         <col className="w-[6.75rem]" />
                         <col className="w-[8.25rem]" />
@@ -410,6 +500,11 @@ export function SupportAnalyticsTicketExplorerModal({
                               {t.subject || "—"}
                             </td>
                             <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
+                            {!showResolvedColumn ? (
+                              <td className="truncate px-2 py-2" title={t.groupName ?? undefined}>
+                                {t.groupName || "Unassigned"}
+                              </td>
+                            ) : null}
                             <td className="px-2 py-2">{t.statusLabel}</td>
                             <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
                             {showResolvedColumn ? (

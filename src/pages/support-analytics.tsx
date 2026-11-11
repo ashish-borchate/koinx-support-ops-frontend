@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
 import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytics/live-agent-workload";
+import { SupportAnalyticsLiveGroupWorkload } from "@/components/support-analytics/live-group-workload";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
 import { LiveReportingToolbar } from "@/components/support-analytics/live-reporting-toolbar";
 import {
@@ -438,6 +439,8 @@ export function SupportAnalyticsPage() {
                   ) : null}
                 </div>
               </section>
+
+              <SupportAnalyticsLiveGroupWorkload onExplore={setExplorerRequest} />
 
               <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
 

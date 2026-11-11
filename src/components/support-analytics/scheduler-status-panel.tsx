@@ -79,14 +79,19 @@ export function SupportAnalyticsSchedulerStatusPanel({
   display,
   inOperationalWindow,
   ticketsStored,
+  detailsOpen = false,
+  hideDetailsToggle = false,
   children,
 }: {
   display?: FreshnessDisplay | null;
   inOperationalWindow?: boolean;
   ticketsStored?: number;
+  detailsOpen?: boolean;
+  hideDetailsToggle?: boolean;
   children?: ReactNode;
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpenInternal, setDetailsOpenInternal] = useState(false);
+  const expanded = hideDetailsToggle ? detailsOpen : detailsOpenInternal;
 
   if (!display) return null;
 
@@ -141,7 +146,7 @@ export function SupportAnalyticsSchedulerStatusPanel({
           : "text-muted-foreground";
 
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-card/80 px-3 py-2.5">
+    <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <div
@@ -163,23 +168,25 @@ export function SupportAnalyticsSchedulerStatusPanel({
           </span>
         ) : null}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-          aria-expanded={detailsOpen}
-          onClick={() => setDetailsOpen((v) => !v)}
-        >
-          Sync details
-          {detailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </Button>
+        {!hideDetailsToggle ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+            aria-expanded={expanded}
+            onClick={() => setDetailsOpenInternal((v) => !v)}
+          >
+            Sync details
+            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </Button>
+        ) : null}
       </div>
 
       {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
       </div>
 
-      {detailsOpen ? (
+      {expanded ? (
         <SyncDetailsPanel>
           <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
             <SyncDetailRow label="Last successful sync">

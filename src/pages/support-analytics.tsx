@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { ErrorBlock, LoadingBlock, PageHeader, SectionHeader } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -142,6 +142,7 @@ export function SupportAnalyticsPage() {
   const [explorerRequest, setExplorerRequest] = useState<SupportAnalyticsTicketExplorerRequest | null>(null);
   const rangeInit = useRef(false);
   const [mainTab, setMainTab] = useState<"live" | "historical">("live");
+  const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
 
   const queryKey = useMemo(
     () => ["support-analytics", "overview", appliedFrom, appliedTo],
@@ -246,31 +247,54 @@ export function SupportAnalyticsPage() {
       ? syncRun.error.message
       : "Freshdesk sync failed.";
 
+  const showSyncDetails = mainTab === "live" && Boolean(freshness?.display);
+
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-5 pb-10">
       <PageHeader
         eyebrow="Operations"
         title="Support Analytics"
         description="Freshdesk ticket operations — separate from official KPI Performance scoring."
         action={
-          canSync ? (
-            <Button variant="default" size="sm" disabled={syncRun.isPending} onClick={() => syncRun.mutate()}>
-              <RefreshCw className={syncRun.isPending ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
-              {syncRun.isPending ? "Syncing…" : "Sync Freshdesk"}
-            </Button>
+          canSync || showSyncDetails ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canSync ? (
+                <Button variant="default" size="sm" disabled={syncRun.isPending} onClick={() => syncRun.mutate()}>
+                  <RefreshCw className={syncRun.isPending ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />
+                  {syncRun.isPending ? "Syncing…" : "Sync Freshdesk"}
+                </Button>
+              ) : null}
+              {showSyncDetails ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  aria-expanded={syncDetailsOpen}
+                  onClick={() => setSyncDetailsOpen((v) => !v)}
+                >
+                  Sync details
+                  {syncDetailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+              ) : null}
+            </div>
           ) : null
         }
       />
 
-      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "live" | "historical")}>
-        <TabsList>
-          <TabsTrigger value="live">Live (API sync)</TabsTrigger>
-          <TabsTrigger value="historical">Historical Analytics</TabsTrigger>
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "live" | "historical")} className="gap-4">
+        <TabsList variant="line" className="h-auto w-full justify-start gap-1 border-0 bg-transparent p-0 sm:w-auto">
+          <TabsTrigger value="live" className="px-4 py-2 after:bottom-0">
+            Live sync
+          </TabsTrigger>
+          <TabsTrigger value="historical" className="px-4 py-2 after:bottom-0">
+            Historical
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="historical" className="mt-4">
           <SupportAnalyticsHistoricalPanel />
         </TabsContent>
-        <TabsContent value="live" className="mt-4 space-y-6">
+        <TabsContent value="live" className="mt-0 space-y-4">
           {syncRun.isPending ? <LoadingBlock label="Syncing Freshdesk tickets into the analytics store…" /> : null}
 
           {syncRun.isError ? (
@@ -285,6 +309,8 @@ export function SupportAnalyticsPage() {
               display={freshness.display}
               inOperationalWindow={freshness.schedule?.inQuietHours === false}
               ticketsStored={freshness.ticketsStored}
+              detailsOpen={syncDetailsOpen}
+              hideDetailsToggle
             />
           ) : null}
 

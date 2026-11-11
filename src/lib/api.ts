@@ -34,9 +34,25 @@ function apiUrl(path: string) {
   return `${base}${path}`;
 }
 
+export async function apiFormData<T>(path: string, formData: FormData): Promise<T> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const viewAs = getViewAs();
+  if (viewAs) headers.set("X-View-As", viewAs);
+  const response = await fetch(apiUrl(path), { method: "POST", body: formData, headers });
+  const text = await response.text();
+  const data = text ? (JSON.parse(text) as { error?: string }) : {};
+  if (!response.ok) {
+    throw new ApiError(response.status, data.error || "Upload failed.");
+  }
+  return JSON.parse(text) as T;
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (options.body && !headers.has("Content-Type") && !isFormData) headers.set("Content-Type", "application/json");
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const viewAs = getViewAs();

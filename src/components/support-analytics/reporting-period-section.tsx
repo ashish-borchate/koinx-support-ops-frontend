@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCalendarDate, formatIsoDateSlash } from "@/lib/format";
+import { formatCalendarDate } from "@/lib/format";
 import {
   resolveDatePreset,
   type DatePresetId,
@@ -39,16 +40,32 @@ export function ReportingPeriodSection({
   onApply,
   showIstInSummary = true,
 }: ReportingPeriodSectionProps) {
-  const showCustom = preset === "custom";
+  const [customEditing, setCustomEditing] = useState(false);
 
   function selectPreset(next: DatePresetId) {
+    if (next === "custom") {
+      if (preset === "custom") {
+        setCustomEditing((open) => !open);
+        return;
+      }
+      onPresetChange("custom");
+      setCustomEditing(true);
+      return;
+    }
+    setCustomEditing(false);
     onPresetChange(next);
-    if (next === "custom") return;
     const { from, to } = resolveDatePreset(next);
     onDraftFrom(from);
     onDraftTo(to);
     onApply(from, to);
   }
+
+  function applyCustom() {
+    onApply(draftFrom, draftTo);
+    setCustomEditing(false);
+  }
+
+  const showCustomInputs = preset === "custom" && customEditing;
 
   return (
     <section className="rounded-lg border border-border bg-card px-3 py-3">
@@ -74,18 +91,13 @@ export function ReportingPeriodSection({
             {showIstInSummary ? " (IST)" : ""}
           </span>
         ) : null}
-        {showCustom ? (
+        {showCustomInputs ? (
           <span className="flex flex-wrap items-end gap-2">
             <DateBoundInput label="FROM" value={draftFrom} onChange={onDraftFrom} />
             <DateBoundInput label="TO" value={draftTo} onChange={onDraftTo} />
-            <Button size="sm" className="h-9" onClick={() => onApply(draftFrom, draftTo)}>
+            <Button size="sm" className="h-9" onClick={applyCustom}>
               Apply range
             </Button>
-          </span>
-        ) : null}
-        {!showCustom && appliedFrom && appliedTo ? (
-          <span className="sr-only">
-            {formatIsoDateSlash(appliedFrom)} to {formatIsoDateSlash(appliedTo)}
           </span>
         ) : null}
       </div>

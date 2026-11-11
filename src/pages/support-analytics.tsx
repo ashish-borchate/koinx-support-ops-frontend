@@ -12,8 +12,8 @@ import { STALE } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
-import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytics/live-agent-workload";
 import { SupportAnalyticsLiveGroupWorkload } from "@/components/support-analytics/live-group-workload";
+import { LIVE_WORKLOAD_EXPLORER_NOTES } from "@/components/support-analytics/live-workload-shared";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
 import { ReportingPeriodSection } from "@/components/support-analytics/reporting-period-section";
 import type { DatePresetId } from "@/lib/support-analytics-date-presets";
@@ -113,7 +113,7 @@ function definitionFromApi(
     label: row.label,
     description: row.description,
     kind: row.kind,
-    notes: row.notes,
+    notes: fallback.notes ?? row.notes,
   };
 }
 
@@ -237,7 +237,7 @@ export function SupportAnalyticsPage() {
     const subtitle =
       periodKinds.has(kind) && appliedFrom && appliedTo
         ? `${formatCalendarDate(appliedFrom)} – ${formatCalendarDate(appliedTo)} (IST) · Live sync store`
-        : "Latest Live sync snapshot";
+        : undefined;
     setExplorerRequest({
       source: "live",
       title,
@@ -365,6 +365,7 @@ export function SupportAnalyticsPage() {
                       label: "Total backlog",
                       kind: "snapshot",
                       description: "Unresolved workload statuses in the Live store.",
+                      notes: LIVE_WORKLOAD_EXPLORER_NOTES,
                     })}
                     onDrill={() => openLiveTickets("Total backlog", "backlog")}
                   />
@@ -445,8 +446,6 @@ export function SupportAnalyticsPage() {
               </section>
 
               <SupportAnalyticsLiveGroupWorkload onExplore={setExplorerRequest} />
-
-              <SupportAnalyticsLiveAgentWorkload onExplore={setExplorerRequest} />
 
               <section className="space-y-3 rounded-xl border border-border bg-card/40 p-3 sm:p-4">
                 <SectionHeader title="Selected Period Data — Not Live" />

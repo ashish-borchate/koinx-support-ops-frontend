@@ -1,11 +1,12 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SectionHeader, LoadingBlock, ErrorBlock } from "@/components/bits";
 import { formatNumber } from "@/lib/format";
 import { api } from "@/lib/api";
 import { STALE } from "@/lib/query-client";
 import type { SupportAnalyticsTicketExplorerRequest } from "@/components/support-analytics/ticket-explorer-modal";
+import { sortLiveGroupRows } from "@/components/support-analytics/live-group-display";
 import {
-  backlogExplorerSubtitle,
   buildWorkloadFilterTabs,
   groupFreshdeskIdParam,
   type LiveWorkloadCounts,
@@ -40,7 +41,6 @@ function openGroupExplorer(
   onExplore({
     source: "live",
     title: group.groupName,
-    subtitle: backlogExplorerSubtitle(group.backlog, "Live sync · by group"),
     exportFileName: `live-group-${groupParam}.csv`,
     filterTabs: tabs,
     initialTabKey: tab?.key ?? "backlog",
@@ -67,6 +67,10 @@ export function SupportAnalyticsLiveGroupWorkload({
   });
 
   const data = workload.data;
+  const displayGroups = useMemo(
+    () => (data ? sortLiveGroupRows(data.groups) : []),
+    [data],
+  );
 
   return (
     <section className="space-y-3">
@@ -77,25 +81,23 @@ export function SupportAnalyticsLiveGroupWorkload({
 
       {data ? (
         <>
-          {data.groups.length === 0 ? (
+          {displayGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground">No Freshdesk groups in the Live store yet.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border bg-card">
-              <table className="min-w-[56rem] w-full text-sm">
+              <table className="min-w-[40rem] w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Group</th>
                     <th className="px-2 py-2 font-medium text-right">Backlog</th>
                     <th className="px-2 py-2 font-medium text-right">Open</th>
                     <th className="px-2 py-2 font-medium text-right">Pending</th>
-                    <th className="px-2 py-2 font-medium text-right">Waiting</th>
-                    <th className="px-2 py-2 font-medium text-right">AI</th>
+                    <th className="px-2 py-2 font-medium text-right">Waiting on Customer</th>
                     <th className="px-2 py-2 font-medium text-right">Overdue</th>
-                    <th className="px-2 py-2 font-medium text-right">High/Urg</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.groups.map((g) => {
+                  {displayGroups.map((g) => {
                     const dot = groupActivityDot(g);
                     return (
                       <tr key={String(g.groupFreshdeskId)} className="border-b border-border/60 last:border-0">
@@ -162,9 +164,7 @@ function MetricCells({
       <MetricCell value={counts.statusOpen} onClick={() => onMetric("open")} />
       <MetricCell value={counts.pending} onClick={() => onMetric("pending")} />
       <MetricCell value={counts.waitingOnCustomer} onClick={() => onMetric("waiting")} />
-      <MetricCell value={counts.assignedToAi} onClick={() => onMetric("assigned_to_ai")} />
       <MetricCell value={counts.overdueResolution} onClick={() => onMetric("overdue")} tone="warn" />
-      <MetricCell value={counts.highUrgentPriority} onClick={() => onMetric("high_urgent")} />
     </>
   );
 }

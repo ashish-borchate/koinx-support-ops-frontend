@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Download, Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
+import { sortLiveGroupRows } from "@/components/support-analytics/live-group-display";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ export type SupportAnalyticsTicketExplorerRequest = {
 
 type TicketSortField = "created" | "due" | "updated";
 type SortDirection = "asc" | "desc";
+type TicketSortKey = `${TicketSortField}:${SortDirection}`;
 
 const PAGE_SIZE = 25;
 
@@ -148,11 +150,19 @@ function toCsv(rows: SupportAnalyticsTicketRow[], includeResolved: boolean) {
   return [header.join(","), ...lines].join("\n");
 }
 
-const SORT_FIELD_LABEL: Record<TicketSortField, string> = {
-  created: "Date created",
-  due: "Due by time",
-  updated: "Last modified",
-};
+const SORT_OPTIONS: { value: TicketSortKey; label: string }[] = [
+  { value: "created:desc", label: "Date created · Newest" },
+  { value: "created:asc", label: "Date created · Oldest" },
+  { value: "due:desc", label: "Due by time · Newest" },
+  { value: "due:asc", label: "Due by time · Oldest" },
+  { value: "updated:desc", label: "Last modified · Newest" },
+  { value: "updated:asc", label: "Last modified · Oldest" },
+];
+
+function parseSortKey(key: TicketSortKey): { field: TicketSortField; direction: SortDirection } {
+  const [field, direction] = key.split(":") as [TicketSortField, SortDirection];
+  return { field, direction };
+}
 
 function tabGroupScope(params: Record<string, string>): string {
   return params.groupFreshdeskId ?? "all";
@@ -173,8 +183,7 @@ export function SupportAnalyticsTicketExplorerModal({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<TicketSortField>("created");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortKey, setSortKey] = useState<TicketSortKey>("created:desc");
   const [groupFilter, setGroupFilter] = useState<string>("all");
 
   useEffect(() => {
@@ -194,8 +203,7 @@ export function SupportAnalyticsTicketExplorerModal({
     }
     setSearch("");
     setPage(0);
-    setSortField("created");
-    setSortDirection("desc");
+    setSortKey("created:desc");
     const seed =
       request.initialGroupFreshdeskId ??
       request.queryParams.groupFreshdeskId ??
@@ -238,10 +246,6 @@ export function SupportAnalyticsTicketExplorerModal({
 
   const activeTab = request?.filterTabs?.find((t) => t.key === activeTabKey) ?? null;
   const showResolvedColumn = request?.source === "historical";
-  const tabCountsMatchGroupFilter =
-    request?.source !== "live" ||
-    !request.filterTabs?.length ||
-    request.filterTabs.every((t) => liveWorkloadTabCountsReliable(t, groupFilter));
 
   const endpoint =
     request?.source === "historical"
@@ -259,6 +263,13 @@ export function SupportAnalyticsTicketExplorerModal({
       return api<{ tickets: SupportAnalyticsTicketRow[] }>(`${endpoint}?${params}`);
     },
   });
+
+  const { field: sortField, direction: sortDirection } = parseSortKey(sortKey);
+
+  const sortedGroupOptions = useMemo(
+    () => sortLiveGroupRows(groupsCatalog.data?.groups ?? []),
+    [groupsCatalog.data?.groups],
+  );
 
   const filtered = useMemo(() => {
     const rows = ticketsQuery.data?.tickets ?? [];
@@ -301,11 +312,11 @@ export function SupportAnalyticsTicketExplorerModal({
             <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-3 pr-12 text-left">
               <DialogTitle>{request.title}</DialogTitle>
               <DialogDescription id="ticket-explorer-desc">
-                {request.subtitle ?? "Matching tickets"}
+                {request.subtitle ? <span className="block">{request.subtitle}</span> : null}
                 {activeTab?.hint ? (
                   <span className="mt-1 block text-xs">{activeTab.hint}</span>
                 ) : null}
-                <span className="mt-1 block tabular-nums text-foreground">
+                <span className={`block tabular-nums text-foreground ${request.subtitle || activeTab?.hint ? "mt-1" : ""}`}>
                   {activeTab ? `${activeTab.label}: ` : ""}
                   {ticketsQuery.isLoading
                     ? "Loading…"
@@ -315,49 +326,50 @@ export function SupportAnalyticsTicketExplorerModal({
             </DialogHeader>
 
             {request.filterTabs?.length ? (
-              <div
-                className="flex shrink-0 flex-nowrap gap-1 overflow-x-auto border-b border-border bg-background px-4 py-2"
-                role="tablist"
-                aria-label="Workload filters"
-              >
-                {request.filterTabs.map((tab) => {
-                  const showCount =
-                    request.source !== "live" || liveWorkloadTabCountsReliable(tab, groupFilter);
-                  return (
-                    <Button
-                      key={tab.key}
-                      type="button"
-                      size="sm"
-                      variant={tab.key === activeTabKey ? "default" : "outline"}
-                      className="h-8 shrink-0 whitespace-nowrap text-xs"
-                      role="tab"
-                      aria-selected={tab.key === activeTabKey}
-                      title={
-                        showCount ? undefined : "Count applies to the group filter from when you opened this view"
-                      }
-                      onClick={() => {
-                        setActiveTabKey(tab.key);
-                        setPage(0);
-                        setSearch("");
-                      }}
-                    >
-                      {showCount ? `${tab.label} (${formatNumber(tab.count)})` : tab.label}
-                    </Button>
-                  );
-                })}
+              <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-4 py-2">
+                <div
+                  className="flex min-w-0 flex-1 flex-nowrap gap-1 overflow-x-auto"
+                  role="tablist"
+                  aria-label="Workload filters"
+                >
+                  {request.filterTabs.map((tab) => {
+                    const showCount =
+                      request.source !== "live" || liveWorkloadTabCountsReliable(tab, groupFilter);
+                    return (
+                      <Button
+                        key={tab.key}
+                        type="button"
+                        size="sm"
+                        variant={tab.key === activeTabKey ? "default" : "outline"}
+                        className="h-8 shrink-0 whitespace-nowrap text-xs"
+                        role="tab"
+                        aria-selected={tab.key === activeTabKey}
+                        title={
+                          showCount ? undefined : "Count applies to the group filter from when you opened this view"
+                        }
+                        onClick={() => {
+                          setActiveTabKey(tab.key);
+                          setPage(0);
+                          setSearch("");
+                        }}
+                      >
+                        {showCount ? `${tab.label} (${formatNumber(tab.count)})` : tab.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 whitespace-nowrap"
+                  disabled={!filtered.length}
+                  onClick={exportCsv}
+                >
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Export CSV
+                </Button>
               </div>
-            ) : null}
-
-            {request.filterTabs?.length ? (
-              <p className="shrink-0 bg-background px-4 pt-1 text-[11px] text-muted-foreground">
-                {!tabCountsMatchGroupFilter ? (
-                  <span className="block">
-                    Status tab counts match the group you opened from; badges are hidden after you change the group
-                    filter. The ticket list below reflects your current filters.
-                  </span>
-                ) : null}
-                Overdue and High/Urgent overlap status tabs — tickets are not double-counted in backlog totals.
-              </p>
             ) : null}
 
             <div className="flex shrink-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-background px-4 py-2">
@@ -375,9 +387,7 @@ export function SupportAnalyticsTicketExplorerModal({
                   <SelectContent>
                     <SelectItem value="all">All groups</SelectItem>
                     <SelectItem value="0">Unassigned group</SelectItem>
-                    {(groupsCatalog.data?.groups ?? [])
-                      .filter((g) => g.groupFreshdeskId != null)
-                      .map((g) => (
+                    {sortedGroupOptions.map((g) => (
                         <SelectItem key={String(g.groupFreshdeskId)} value={String(g.groupFreshdeskId)}>
                           {g.groupName}
                         </SelectItem>
@@ -399,57 +409,36 @@ export function SupportAnalyticsTicketExplorerModal({
                 />
               </div>
               <Select
-                value={sortField}
+                value={sortKey}
                 onValueChange={(value) => {
-                  setSortField(value as TicketSortField);
+                  setSortKey(value as TicketSortKey);
                   setPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-[8.75rem] shrink-0" aria-label="Sort field">
-                  <SelectValue placeholder="Sort by" />
+                <SelectTrigger className="h-9 w-[11.5rem] shrink-0" aria-label="Sort tickets">
+                  <SelectValue placeholder="Sort" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="created">Date created</SelectItem>
-                  <SelectItem value="due">Due by time</SelectItem>
-                  <SelectItem value="updated">Last modified</SelectItem>
+                  {SORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Select
-                value={sortDirection}
-                onValueChange={(value) => {
-                  setSortDirection(value as SortDirection);
-                  setPage(0);
-                }}
-              >
-                <SelectTrigger className="h-9 w-[7.75rem] shrink-0" aria-label="Sort direction">
-                  <span className="flex items-center gap-1.5">
-                    {sortDirection === "asc" ? (
-                      <ArrowUp className="h-3.5 w-3.5" aria-hidden />
-                    ) : (
-                      <ArrowDown className="h-3.5 w-3.5" aria-hidden />
-                    )}
-                    <SelectValue placeholder="Order" />
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="desc">Descending</SelectItem>
-                  <SelectItem value="asc">Ascending</SelectItem>
-                </SelectContent>
-              </Select>
-              <span className="hidden text-xs text-muted-foreground sm:inline">
-                {SORT_FIELD_LABEL[sortField]} · {sortDirection === "desc" ? "Newest first" : "Oldest first"}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 whitespace-nowrap"
-                disabled={!filtered.length}
-                onClick={exportCsv}
-              >
-                <Download className="mr-2 h-3.5 w-3.5" />
-                Export CSV
-              </Button>
+              {!request.filterTabs?.length ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto shrink-0 whitespace-nowrap"
+                  disabled={!filtered.length}
+                  onClick={exportCsv}
+                >
+                  <Download className="mr-2 h-3.5 w-3.5" />
+                  Export CSV
+                </Button>
+              ) : null}
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">

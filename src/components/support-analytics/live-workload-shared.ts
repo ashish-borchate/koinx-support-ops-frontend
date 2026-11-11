@@ -1,4 +1,3 @@
-import { formatNumber } from "@/lib/format";
 import type { TicketExplorerFilterTab } from "@/components/support-analytics/ticket-explorer-modal";
 
 export type LiveWorkloadCounts = {
@@ -28,11 +27,14 @@ export function agentFreshdeskIdParam(agentFreshdeskId: number | null): string {
   return agentFreshdeskId == null ? "0" : String(agentFreshdeskId);
 }
 
+export const LIVE_WORKLOAD_EXPLORER_NOTES =
+  "Status tab counts match the group you opened from; badges are hidden after you change the group filter. The ticket list below reflects your current filters. Overdue overlaps Open, Pending, and Waiting — tickets are not double-counted in backlog totals.";
+
 export function buildWorkloadFilterTabs(
   counts: LiveWorkloadCounts,
   baseQuery: Record<string, string>,
 ): TicketExplorerFilterTab[] {
-  const tabs: TicketExplorerFilterTab[] = [
+  return [
     {
       key: "backlog",
       label: "Backlog",
@@ -46,8 +48,14 @@ export function buildWorkloadFilterTabs(
       queryParams: { kind: "open", ...baseQuery },
     },
     {
+      key: "pending",
+      label: "Pending",
+      count: counts.pending,
+      queryParams: { kind: "pending", ...baseQuery },
+    },
+    {
       key: "waiting",
-      label: "Waiting on Cust.",
+      label: "Waiting on customer",
       count: counts.waitingOnCustomer,
       queryParams: { kind: "waiting", ...baseQuery },
     },
@@ -56,35 +64,8 @@ export function buildWorkloadFilterTabs(
       label: "Overdue",
       count: counts.overdueResolution,
       queryParams: { kind: "overdue_resolution", ...baseQuery },
-      hint: "Resolution SLA overdue; may include Open or Waiting tickets.",
-    },
-    {
-      key: "high_urgent",
-      label: "High / urgent",
-      count: counts.highUrgentPriority,
-      queryParams: { kind: "high_urgent", ...baseQuery },
-      hint: "Priority high or urgent; may include Open or Waiting tickets.",
     },
   ];
-
-  if (counts.pending > 0) {
-    tabs.splice(2, 0, {
-      key: "pending",
-      label: "Pending",
-      count: counts.pending,
-      queryParams: { kind: "pending", ...baseQuery },
-    });
-  }
-  if (counts.assignedToAi > 0) {
-    tabs.push({
-      key: "assigned_to_ai",
-      label: "Assigned to AI",
-      count: counts.assignedToAi,
-      queryParams: { kind: "assigned_to_ai", ...baseQuery },
-    });
-  }
-
-  return tabs;
 }
 
 export function workloadMetricTabKey(metric: LiveWorkloadMetricKey): string {
@@ -104,8 +85,4 @@ export function workloadMetricTabKey(metric: LiveWorkloadMetricKey): string {
     case "high_urgent":
       return "high_urgent";
   }
-}
-
-export function backlogExplorerSubtitle(backlog: number, context: string): string {
-  return `${formatNumber(backlog)} backlog ticket${backlog === 1 ? "" : "s"} · ${context}`;
 }

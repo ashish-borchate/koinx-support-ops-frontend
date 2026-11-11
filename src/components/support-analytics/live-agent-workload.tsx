@@ -14,10 +14,13 @@ import {
   type LiveWorkloadMetricKey,
   workloadMetricTabKey,
 } from "@/components/support-analytics/live-workload-shared";
+import type { AgentPresencePublic } from "@/components/support-analytics/agent-presence-display";
+import { AgentPresenceBlock } from "@/components/support-analytics/agent-presence-ui";
 
 type LiveAgentRow = LiveWorkloadCounts & {
   agentFreshdeskId: number | null;
   agentName: string;
+  presence?: AgentPresencePublic;
 };
 
 type LiveAgentWorkload = {
@@ -84,17 +87,20 @@ export function SupportAnalyticsLiveAgentWorkload({
             <ul className="divide-y divide-border rounded-xl border border-border bg-card">
               {data.agents.map((a) => (
                 <li key={String(a.agentFreshdeskId)} className="px-3 py-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      type="button"
-                      className="text-left text-sm font-medium hover:underline"
-                      onClick={() => openAgentExplorer(a, "backlog")}
-                    >
-                      {a.agentName}
-                      <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
-                        {formatNumber(a.backlog)} backlog
-                      </span>
-                    </button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        className="text-left text-sm font-medium hover:underline"
+                        onClick={() => openAgentExplorer(a, "backlog")}
+                      >
+                        {a.agentName}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+                          {formatNumber(a.backlog)} backlog
+                        </span>
+                      </button>
+                      <AgentPresenceBlock presence={a.presence} />
+                    </div>
                     <div className="flex flex-wrap gap-1.5 text-xs">
                       <CountChip label="Open" value={a.statusOpen} onClick={() => openAgentExplorer(a, "open")} />
                       <CountChip

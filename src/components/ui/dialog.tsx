@@ -52,16 +52,18 @@ function DialogContent({
   children,
   showCloseButton = true,
   layer = "default",
+  overlayClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  overlayClassName?: string
   /** Raise above another open dialog (e.g. duration picker inside KPI entry). */
   layer?: "default" | "stacked"
 }) {
   const stacked = layer === "stacked"
   return (
     <DialogPortal>
-      <DialogOverlay className={stacked ? "z-[60]" : undefined} />
+      <DialogOverlay className={cn(stacked ? "z-[60]" : undefined, overlayClassName)} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

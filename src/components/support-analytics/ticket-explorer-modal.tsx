@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Download, ExternalLink, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,21 +43,15 @@ export type SupportAnalyticsTicketExplorerRequest = {
   initialTabKey?: string;
 };
 
-type LiveBacklogSortField = "created" | "due" | "updated";
+type TicketSortField = "created" | "due" | "updated";
 type SortDirection = "asc" | "desc";
 
 const PAGE_SIZE = 25;
+const STICKY_HEAD =
+  "sticky top-0 z-20 bg-background px-2 py-2 shadow-[0_1px_0_0_hsl(var(--border))]";
 
 function ticketLabel(t: SupportAnalyticsTicketRow) {
   return t.displayId != null ? String(t.displayId) : String(t.freshdeskId);
-}
-
-function isLiveTotalBacklogView(
-  source: SupportAnalyticsTicketExplorerRequest["source"] | undefined,
-  queryParams: Record<string, string> | null,
-  filterTabs?: TicketExplorerFilterTab[],
-) {
-  return source === "live" && queryParams?.kind === "backlog" && !filterTabs?.length;
 }
 
 function sortTimestamp(iso?: string | null): number | null {
@@ -66,10 +60,10 @@ function sortTimestamp(iso?: string | null): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
-function compareLiveBacklogRows(
+function compareTicketRows(
   a: SupportAnalyticsTicketRow,
   b: SupportAnalyticsTicketRow,
-  field: LiveBacklogSortField,
+  field: TicketSortField,
   direction: SortDirection,
 ): number {
   const pick = (row: SupportAnalyticsTicketRow) => {
@@ -103,35 +97,33 @@ function matchesSearch(t: SupportAnalyticsTicketRow, needle: string) {
   return hay.includes(q);
 }
 
-function toCsv(rows: SupportAnalyticsTicketRow[], liveTotalBacklog: boolean) {
-  if (liveTotalBacklog) {
-    const header = ["Ticket No", "Subject", "Assignee", "Status", "Created (IST)", "Due by (IST)", "Last modified (IST)", "Freshdesk URL"];
-    const lines = rows.map((t) =>
-      [
-        ticketLabel(t),
-        (t.subject ?? "").replace(/"/g, '""'),
-        (t.assignedAgentName ?? "").replace(/"/g, '""'),
-        t.statusLabel,
-        t.createdAt ? formatWhen(t.createdAt) : "",
-        t.dueBy ? formatWhen(t.dueBy) : "",
-        t.updatedAt ? formatWhen(t.updatedAt) : "",
-        t.url ?? "",
-      ]
-        .map((c) => `"${c}"`)
-        .join(","),
+function TicketNoCell({ ticket }: { ticket: SupportAnalyticsTicketRow }) {
+  const label = ticketLabel(ticket);
+  if (ticket.url) {
+    return (
+      <a
+        href={ticket.url}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium tabular-nums text-primary hover:underline"
+      >
+        {label}
+      </a>
     );
-    return [header.join(","), ...lines].join("\n");
   }
+  return <span className="font-medium tabular-nums">{label}</span>;
+}
 
+function toCsv(rows: SupportAnalyticsTicketRow[], includeResolved: boolean) {
   const header = [
-    "Ticket",
+    "Ticket No",
     "Subject",
     "Assignee",
     "Status",
-    "Priority",
     "Created (IST)",
-    "Resolved",
-    "First response",
+    ...(includeResolved ? ["Resolved (IST)"] : []),
+    "Due by (IST)",
+    "Last modified (IST)",
     "Freshdesk URL",
   ];
   const lines = rows.map((t) =>
@@ -140,10 +132,10 @@ function toCsv(rows: SupportAnalyticsTicketRow[], liveTotalBacklog: boolean) {
       (t.subject ?? "").replace(/"/g, '""'),
       (t.assignedAgentName ?? "").replace(/"/g, '""'),
       t.statusLabel,
-      t.priorityLabel,
       t.createdAt ? formatWhen(t.createdAt) : "",
-      t.resolvedAt ? formatWhen(t.resolvedAt) : "",
-      t.firstRespondedAt ? formatWhen(t.firstRespondedAt) : "",
+      ...(includeResolved ? [t.resolvedAt ? formatWhen(t.resolvedAt) : ""] : []),
+      t.dueBy ? formatWhen(t.dueBy) : "",
+      t.updatedAt ? formatWhen(t.updatedAt) : "",
       t.url ?? "",
     ]
       .map((c) => `"${c}"`)
@@ -152,7 +144,7 @@ function toCsv(rows: SupportAnalyticsTicketRow[], liveTotalBacklog: boolean) {
   return [header.join(","), ...lines].join("\n");
 }
 
-const SORT_FIELD_LABEL: Record<LiveBacklogSortField, string> = {
+const SORT_FIELD_LABEL: Record<TicketSortField, string> = {
   created: "Date created",
   due: "Due by time",
   updated: "Last modified",
@@ -168,7 +160,7 @@ export function SupportAnalyticsTicketExplorerModal({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<LiveBacklogSortField>("created");
+  const [sortField, setSortField] = useState<TicketSortField>("created");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   useEffect(() => {
@@ -201,7 +193,7 @@ export function SupportAnalyticsTicketExplorerModal({
   }, [request, activeTabKey]);
 
   const activeTab = request?.filterTabs?.find((t) => t.key === activeTabKey) ?? null;
-  const liveTotalBacklog = isLiveTotalBacklogView(request?.source, activeQueryParams, request?.filterTabs);
+  const showResolvedColumn = request?.source === "historical";
 
   const endpoint =
     request?.source === "historical"
@@ -223,9 +215,8 @@ export function SupportAnalyticsTicketExplorerModal({
   const filtered = useMemo(() => {
     const rows = ticketsQuery.data?.tickets ?? [];
     const searched = rows.filter((t) => matchesSearch(t, search));
-    if (!liveTotalBacklog) return searched;
-    return [...searched].sort((a, b) => compareLiveBacklogRows(a, b, sortField, sortDirection));
-  }, [ticketsQuery.data?.tickets, search, liveTotalBacklog, sortField, sortDirection]);
+    return [...searched].sort((a, b) => compareTicketRows(a, b, sortField, sortDirection));
+  }, [ticketsQuery.data?.tickets, search, sortField, sortDirection]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -240,7 +231,7 @@ export function SupportAnalyticsTicketExplorerModal({
   }
 
   function exportCsv() {
-    const blob = new Blob([toCsv(filtered, liveTotalBacklog)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([toCsv(filtered, showResolvedColumn)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -259,7 +250,7 @@ export function SupportAnalyticsTicketExplorerModal({
       >
         {request ? (
           <>
-            <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left">
+            <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-3 pr-12 text-left">
               <DialogTitle>{request.title}</DialogTitle>
               <DialogDescription id="ticket-explorer-desc">
                 {request.subtitle ?? "Matching tickets"}
@@ -277,7 +268,7 @@ export function SupportAnalyticsTicketExplorerModal({
 
             {request.filterTabs?.length ? (
               <div
-                className="flex shrink-0 flex-wrap gap-1 border-b border-border px-4 py-2"
+                className="flex shrink-0 flex-wrap gap-1 border-b border-border bg-background px-4 py-2"
                 role="tablist"
                 aria-label="Workload filters"
               >
@@ -303,12 +294,12 @@ export function SupportAnalyticsTicketExplorerModal({
             ) : null}
 
             {request.filterTabs?.length ? (
-              <p className="shrink-0 px-4 pt-1 text-[11px] text-muted-foreground">
+              <p className="shrink-0 bg-background px-4 pt-1 text-[11px] text-muted-foreground">
                 Overdue and High/Urgent overlap status tabs — tickets are not double-counted in backlog totals.
               </p>
             ) : null}
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2">
               <div className="relative min-w-[12rem] flex-1">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -322,148 +313,97 @@ export function SupportAnalyticsTicketExplorerModal({
                   aria-label="Search tickets"
                 />
               </div>
-              {liveTotalBacklog ? (
-                <>
-                  <Select
-                    value={sortField}
-                    onValueChange={(value) => {
-                      setSortField(value as LiveBacklogSortField);
-                      setPage(0);
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-[9.5rem]" aria-label="Sort field">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="created">Date created</SelectItem>
-                      <SelectItem value="due">Due by time</SelectItem>
-                      <SelectItem value="updated">Last modified</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={sortDirection}
-                    onValueChange={(value) => {
-                      setSortDirection(value as SortDirection);
-                      setPage(0);
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-[8.5rem]" aria-label="Sort direction">
-                      <span className="flex items-center gap-1.5">
-                        {sortDirection === "asc" ? (
-                          <ArrowUp className="h-3.5 w-3.5" aria-hidden />
-                        ) : (
-                          <ArrowDown className="h-3.5 w-3.5" aria-hidden />
-                        )}
-                        <SelectValue placeholder="Order" />
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="desc">Descending</SelectItem>
-                      <SelectItem value="asc">Ascending</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
-                    {SORT_FIELD_LABEL[sortField]} · {sortDirection === "desc" ? "Newest first" : "Oldest first"}
+              <Select
+                value={sortField}
+                onValueChange={(value) => {
+                  setSortField(value as TicketSortField);
+                  setPage(0);
+                }}
+              >
+                <SelectTrigger className="h-9 w-[9.5rem]" aria-label="Sort field">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created">Date created</SelectItem>
+                  <SelectItem value="due">Due by time</SelectItem>
+                  <SelectItem value="updated">Last modified</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={sortDirection}
+                onValueChange={(value) => {
+                  setSortDirection(value as SortDirection);
+                  setPage(0);
+                }}
+              >
+                <SelectTrigger className="h-9 w-[8.5rem]" aria-label="Sort direction">
+                  <span className="flex items-center gap-1.5">
+                    {sortDirection === "asc" ? (
+                      <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+                    ) : (
+                      <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                    <SelectValue placeholder="Order" />
                   </span>
-                </>
-              ) : null}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Descending</SelectItem>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                {SORT_FIELD_LABEL[sortField]} · {sortDirection === "desc" ? "Newest first" : "Oldest first"}
+              </span>
               <Button type="button" variant="outline" size="sm" disabled={!filtered.length} onClick={exportCsv}>
                 <Download className="mr-2 h-3.5 w-3.5" />
                 Export CSV
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-background px-4 py-2">
               {ticketsQuery.isLoading ? <LoadingBlock label="Loading tickets…" /> : null}
               {ticketsQuery.isError ? <ErrorBlock message="Could not load tickets." /> : null}
               {!ticketsQuery.isLoading && !ticketsQuery.isError && filtered.length === 0 ? (
                 <Empty title="No tickets" body="Nothing matches this filter." />
               ) : null}
               {pageRows.length > 0 ? (
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-popover">
-                    {liveTotalBacklog ? (
-                      <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="px-2 py-2">Ticket No</th>
-                        <th className="px-2 py-2">Subject</th>
-                        <th className="px-2 py-2">Assignee</th>
-                        <th className="px-2 py-2">Status</th>
-                        <th className="px-2 py-2">Created</th>
-                      </tr>
-                    ) : (
-                      <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="px-2 py-2">#</th>
-                        <th className="px-2 py-2">Subject</th>
-                        <th className="px-2 py-2">Assignee</th>
-                        <th className="px-2 py-2">Status</th>
-                        <th className="px-2 py-2">Created</th>
-                        <th className="px-2 py-2">Resolved</th>
-                        <th className="px-2 py-2" />
-                      </tr>
-                    )}
+                <table className="w-full border-separate border-spacing-0 text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted-foreground">
+                      <th className={STICKY_HEAD}>Ticket No</th>
+                      <th className={STICKY_HEAD}>Subject</th>
+                      <th className={STICKY_HEAD}>Assignee</th>
+                      <th className={STICKY_HEAD}>Status</th>
+                      <th className={STICKY_HEAD}>Created</th>
+                      {showResolvedColumn ? <th className={STICKY_HEAD}>Resolved</th> : null}
+                    </tr>
                   </thead>
                   <tbody>
-                    {pageRows.map((t) =>
-                      liveTotalBacklog ? (
-                        <tr key={t.freshdeskId} className="border-b border-border/60">
-                          <td className="px-2 py-2 font-medium tabular-nums">
-                            {t.url ? (
-                              <a
-                                href={t.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                {ticketLabel(t)}
-                              </a>
-                            ) : (
-                              ticketLabel(t)
-                            )}
-                          </td>
-                          <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
-                            {t.subject || "—"}
-                          </td>
-                          <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
-                          <td className="px-2 py-2">{t.statusLabel}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
-                        </tr>
-                      ) : (
-                        <tr key={t.freshdeskId} className="border-b border-border/60">
-                          <td className="px-2 py-2 font-medium tabular-nums">#{ticketLabel(t)}</td>
-                          <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
-                            {t.subject || "—"}
-                          </td>
-                          <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
-                          <td className="px-2 py-2">{t.statusLabel}</td>
-                          <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
+                    {pageRows.map((t) => (
+                      <tr key={t.freshdeskId} className="border-b border-border/60">
+                        <td className="px-2 py-2">
+                          <TicketNoCell ticket={t} />
+                        </td>
+                        <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
+                          {t.subject || "—"}
+                        </td>
+                        <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
+                        <td className="px-2 py-2">{t.statusLabel}</td>
+                        <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
+                        {showResolvedColumn ? (
                           <td className="whitespace-nowrap px-2 py-2 text-xs">
                             {t.resolvedAt ? formatWhen(t.resolvedAt) : "—"}
                           </td>
-                          <td className="px-2 py-2 text-right">
-                            {t.url ? (
-                              <a
-                                href={t.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center text-primary hover:underline"
-                              >
-                                Freshdesk
-                                <ExternalLink className="ml-1 h-3 w-3" />
-                              </a>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ),
-                    )}
+                        ) : null}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               ) : null}
             </div>
 
             {filtered.length > PAGE_SIZE ? (
-              <div className="flex shrink-0 items-center justify-between border-t border-border px-4 py-2 text-xs">
+              <div className="flex shrink-0 items-center justify-between border-t border-border bg-background px-4 py-2 text-xs">
                 <span className="text-muted-foreground">
                   Page {safePage + 1} of {pageCount}
                 </span>

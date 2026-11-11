@@ -85,25 +85,23 @@ export function SupportAnalyticsLiveGroupWorkload({
             <p className="text-sm text-muted-foreground">No Freshdesk groups in the Live store yet.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border bg-card">
-              <table className="w-full max-w-4xl table-fixed text-sm">
+              <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  <col className="w-[36%]" />
-                  <col className="w-[12.8%]" />
-                  <col className="w-[12.8%]" />
-                  <col className="w-[12.8%]" />
-                  <col className="w-[12.8%]" />
-                  <col className="w-[12.8%]" />
+                  <col className="w-[23%]" />
+                  <col className="w-[15.4%]" />
+                  <col className="w-[15.4%]" />
+                  <col className="w-[15.4%]" />
+                  <col className="w-[15.4%]" />
+                  <col className="w-[15.4%]" />
                 </colgroup>
                 <thead>
-                  <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
+                  <tr className="border-b border-border bg-muted/30 text-left text-[11px] text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Group</th>
-                    <th className="px-1 py-2 text-right font-medium">Backlog</th>
-                    <th className="px-1 py-2 text-right font-medium">Open</th>
-                    <th className="px-1 py-2 text-right font-medium">Pending</th>
-                    <th className="px-1 py-2 text-right font-medium leading-tight">
-                      <span className="block whitespace-normal">Waiting on Customer</span>
-                    </th>
-                    <th className="px-1 py-2 text-right font-medium">Overdue</th>
+                    <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Backlog</th>
+                    <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Open</th>
+                    <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Pending</th>
+                    <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Waiting on Customer</th>
+                    <th className="px-2 py-2 text-right font-medium whitespace-nowrap">Overdue</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -189,7 +187,7 @@ function MetricCell({
   tone?: "warn";
 }) {
   return (
-    <td className="px-2 py-2 text-right">
+    <td className="px-2 py-2 text-right whitespace-nowrap">
       <button
         type="button"
         disabled={value === 0}

@@ -57,6 +57,38 @@ function ticketLabel(t: SupportAnalyticsTicketRow) {
   return t.displayId != null ? String(t.displayId) : String(t.freshdeskId);
 }
 
+/** Ellipsis truncate for table subject cells (full text stays in title). */
+function truncateSubject(subject: string | null | undefined, maxChars: number) {
+  const text = subject?.trim() || "—";
+  if (text === "—" || text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars - 1)}…`;
+}
+
+function ExplorerTableColgroup({ historical }: { historical: boolean }) {
+  if (historical) {
+    return (
+      <colgroup>
+        <col className="w-[4.5rem]" />
+        <col className="w-[23%]" />
+        <col className="w-[8.75rem]" />
+        <col className="w-[9.25rem]" />
+        <col className="w-[7.25rem]" />
+        <col className="w-[7.25rem]" />
+      </colgroup>
+    );
+  }
+  return (
+    <colgroup>
+      <col className="w-[4.5rem]" />
+      <col className="w-[22%]" />
+      <col className="w-[7.5rem]" />
+      <col className="w-[7.75rem]" />
+      <col className="w-[9.5rem]" />
+      <col className="w-[7.25rem]" />
+    </colgroup>
+  );
+}
+
 function sortTimestamp(iso?: string | null): number | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -362,7 +394,7 @@ export function SupportAnalyticsTicketExplorerModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 shrink-0 whitespace-nowrap"
+                  className="ml-auto h-8 shrink-0 whitespace-nowrap"
                   disabled={!filtered.length}
                   onClick={exportCsv}
                 >
@@ -453,15 +485,7 @@ export function SupportAnalyticsTicketExplorerModal({
                 <>
                   <div className="shrink-0 border-b border-border bg-background px-4">
                     <table className="w-full table-fixed text-sm">
-                      <colgroup>
-                        <col className="w-[5.25rem]" />
-                        <col />
-                        {!showResolvedColumn ? <col className="w-[9rem]" /> : null}
-                        <col className="w-[7rem]" />
-                        <col className="w-[7.25rem]" />
-                        <col className="w-[8.5rem]" />
-                        {showResolvedColumn ? <col className="w-[8.25rem]" /> : null}
-                      </colgroup>
+                      <ExplorerTableColgroup historical={showResolvedColumn} />
                       <thead>
                         <tr className="text-left text-xs text-muted-foreground">
                           <th className="px-2 py-2 font-medium">Ticket No</th>
@@ -477,32 +501,29 @@ export function SupportAnalyticsTicketExplorerModal({
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto px-4">
                     <table className="w-full table-fixed text-sm">
-                      <colgroup>
-                        <col className="w-[5.25rem]" />
-                        <col />
-                        {!showResolvedColumn ? <col className="w-[9rem]" /> : null}
-                        <col className="w-[7rem]" />
-                        <col className="w-[7.25rem]" />
-                        <col className="w-[8.5rem]" />
-                        {showResolvedColumn ? <col className="w-[8.25rem]" /> : null}
-                      </colgroup>
+                      <ExplorerTableColgroup historical={showResolvedColumn} />
                       <tbody>
                         {pageRows.map((t) => (
                           <tr key={t.freshdeskId} className="border-b border-border/60">
                             <td className="px-2 py-2">
                               <TicketNoCell ticket={t} />
                             </td>
-                            <td className="truncate px-2 py-2" title={t.subject ?? undefined}>
-                              {t.subject || "—"}
+                            <td className="max-w-0 truncate px-2 py-2" title={t.subject ?? undefined}>
+                              {truncateSubject(t.subject, showResolvedColumn ? 46 : 42)}
                             </td>
-                            <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
+                            <td
+                              className="truncate whitespace-nowrap px-2 py-2"
+                              title={t.assignedAgentName ?? undefined}
+                            >
+                              {t.assignedAgentName || "—"}
+                            </td>
                             {!showResolvedColumn ? (
-                              <td className="truncate px-2 py-2" title={t.groupName ?? undefined}>
+                              <td className="truncate whitespace-nowrap px-2 py-2" title={t.groupName ?? undefined}>
                                 {t.groupName || "Unassigned"}
                               </td>
                             ) : null}
                             <td className="whitespace-nowrap px-2 py-2 text-xs" title={t.statusLabel}>
-                              {t.statusLabel.length > 18 ? `${t.statusLabel.slice(0, 16)}…` : t.statusLabel}
+                              {t.statusLabel}
                             </td>
                             <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
                             {showResolvedColumn ? (

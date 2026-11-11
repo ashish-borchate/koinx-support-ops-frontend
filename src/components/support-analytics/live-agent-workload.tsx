@@ -19,6 +19,8 @@ import {
 import type { AgentPresencePublic } from "@/components/support-analytics/agent-presence-display";
 import {
   formatAgentPresenceCardSubtitle,
+  presenceCardClassName,
+  presenceCardSubtitleClassName,
   presenceStaleTitle,
 } from "@/components/support-analytics/agent-presence-display";
 
@@ -39,7 +41,22 @@ type LiveAgentWorkload = {
 type AgentMetricTab = LiveWorkloadMetricKey;
 
 /** Freshdesk roster names excluded from the live workload grid (product request). */
-const EXCLUDED_AGENT_NAMES = new Set(["karan tolani", "punit agarwal"]);
+const EXCLUDED_AGENT_MATCHERS = [
+  "karan tolani",
+  "punit agarwal",
+  "harshil",
+  "guna",
+  "rony",
+  "siddant",
+  "siddhant",
+] as const;
+
+function isExcludedAgentName(name: string): boolean {
+  const normalized = name.trim().toLowerCase();
+  return EXCLUDED_AGENT_MATCHERS.some(
+    (part) => normalized === part || normalized.includes(part),
+  );
+}
 
 function agentFilterTabs(agent: LiveAgentRow): TicketExplorerFilterTab[] {
   const responder = agentFreshdeskIdParam(agent.agentFreshdeskId);
@@ -61,9 +78,7 @@ export function SupportAnalyticsLiveAgentWorkload({
 
   const agents = useMemo(() => {
     if (!data?.agents) return [];
-    return data.agents.filter(
-      (a) => !EXCLUDED_AGENT_NAMES.has(a.agentName.trim().toLowerCase()),
-    );
+    return data.agents.filter((a) => !isExcludedAgentName(a.agentName));
   }, [data?.agents]);
 
   function openAgentExplorer(agent: LiveAgentRow, initialMetric: AgentMetricTab = "backlog") {
@@ -127,14 +142,17 @@ function AgentWorkloadCard({ agent, onOpen }: { agent: LiveAgentRow; onOpen: () 
       onClick={onOpen}
       title={stale ? presenceStaleTitle(true) : undefined}
       className={cn(
-        "flex h-full min-h-[6.5rem] flex-col rounded-xl border border-border bg-card p-3 text-left shadow-sm transition",
-        "hover:border-primary/45 hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex h-full min-h-[6.5rem] flex-col rounded-xl border p-3 text-left shadow-sm transition",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        presenceCardClassName(agent.presence),
         stale && "ring-1 ring-dashed ring-muted-foreground/35",
       )}
     >
-      <p className="text-sm font-semibold leading-snug text-foreground">{agent.agentName}</p>
+      <p className="text-sm font-semibold leading-snug">{agent.agentName}</p>
       {presenceLine ? (
-        <p className="mt-1 text-xs leading-snug text-muted-foreground">{presenceLine}</p>
+        <p className={cn("mt-1 text-xs leading-snug", presenceCardSubtitleClassName(agent.presence))}>
+          {presenceLine}
+        </p>
       ) : null}
       <p className="mt-auto pt-2 text-xs font-normal tabular-nums text-foreground">
         <AgentMetricsInline agent={agent} />

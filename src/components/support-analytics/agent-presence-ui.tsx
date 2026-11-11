@@ -1,5 +1,6 @@
 import {
   buildPresenceSinceLines,
+  PRESENCE_TONE_SURFACE,
   presenceBadgeTone,
   presenceStaleTitle,
   type AgentPresencePublic,
@@ -67,12 +68,12 @@ function PresenceStatusPill({
   title?: string;
 }) {
   const toneBorder: Record<typeof tone, string> = {
-    idle: "border-emerald-500/45 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200",
-    away: "border-amber-500/45 bg-amber-500/10 text-amber-900 dark:text-amber-200",
-    busy: "border-violet-500/45 bg-violet-500/10 text-violet-900 dark:text-violet-200",
-    unavailable: "border-slate-500/45 bg-slate-500/10 text-slate-800 dark:text-slate-200",
-    mixed: "border-sky-500/45 bg-sky-500/10 text-sky-900 dark:text-sky-200",
-    unknown: "border-border bg-muted/40 text-muted-foreground",
+    idle: PRESENCE_TONE_SURFACE.idle,
+    away: PRESENCE_TONE_SURFACE.away,
+    busy: PRESENCE_TONE_SURFACE.busy,
+    unavailable: PRESENCE_TONE_SURFACE.unavailable,
+    mixed: PRESENCE_TONE_SURFACE.mixed,
+    unknown: PRESENCE_TONE_SURFACE.unknown,
   };
 
   const text = detail ?? label;

@@ -8,6 +8,7 @@ import {
   isAllChannelsChannel,
   presenceBadgeClassName,
   presenceBadgeTone,
+  presenceCardClassName,
   presenceStaleTitle,
   type AgentPresencePublic,
 } from "./agent-presence-display.js";
@@ -128,6 +129,9 @@ assert.ok(presenceBadgeClassName("Idle", true).includes("ring-dashed"));
 assert.equal(presenceStaleTitle(true), "Presence data may be outdated");
 assert.equal(presenceBadgeTone("Meeting"), "busy");
 assert.equal(presenceBadgeTone("Mixed"), "mixed");
+assert.equal(presenceBadgeTone("All Channels"), "idle");
+assert.match(presenceCardClassName(basePresence({ label: "Break" })), /amber-500/);
+assert.match(presenceCardClassName(basePresence({ label: "Unavailable" })), /slate-500/);
 
 {
   const stale = basePresence({ stale: true, fetchedAt: iso, updatedAt: null });

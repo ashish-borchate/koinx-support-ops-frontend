@@ -142,25 +142,54 @@ export function presenceBadgeTone(label: string): PresenceBadgeTone {
   const normalized = label.trim().toLowerCase();
   if (normalized === "mixed") return "mixed";
   if (normalized === "unknown") return "unknown";
-  if (normalized === "idle") return "idle";
+  if (normalized === "idle" || normalized === "all channels") return "idle";
   if (normalized === "unavailable") return "unavailable";
   if (normalized === "meeting" || normalized === "training") return "busy";
   if (normalized === "lunch" || normalized === "break") return "away";
   return "unknown";
 }
 
-const BADGE_TONE_CLASS: Record<PresenceBadgeTone, string> = {
-  idle: "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200",
-  away: "border-amber-500/45 bg-amber-500/10 text-amber-900 dark:text-amber-200",
-  busy: "border-violet-500/40 bg-violet-500/10 text-violet-900 dark:text-violet-200",
-  unavailable: "border-slate-500/40 bg-slate-500/10 text-slate-800 dark:text-slate-200",
-  mixed: "border-sky-500/40 bg-sky-500/10 text-sky-900 dark:text-sky-200",
-  unknown: "border-border bg-muted text-muted-foreground",
+export const PRESENCE_TONE_SURFACE: Record<PresenceBadgeTone, string> = {
+  idle: "border-emerald-500/45 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100",
+  away: "border-amber-500/45 bg-amber-500/10 text-amber-950 dark:text-amber-100",
+  busy: "border-violet-500/45 bg-violet-500/10 text-violet-950 dark:text-violet-100",
+  unavailable: "border-slate-500/45 bg-slate-500/12 text-slate-900 dark:text-slate-100",
+  mixed: "border-sky-500/45 bg-sky-500/10 text-sky-950 dark:text-sky-100",
+  unknown: "border-border bg-muted/50 text-foreground",
 };
+
+/** Agent workload card — same palette as presence pills. */
+export function presenceCardClassName(presence: AgentPresencePublic | undefined): string {
+  const label = presence?.label ?? "Unknown";
+  const tone = presenceBadgeTone(label);
+  const hoverByTone: Record<PresenceBadgeTone, string> = {
+    idle: "hover:border-emerald-500/60 hover:bg-emerald-500/15",
+    away: "hover:border-amber-500/60 hover:bg-amber-500/15",
+    busy: "hover:border-violet-500/60 hover:bg-violet-500/15",
+    unavailable: "hover:border-slate-500/55 hover:bg-slate-500/18",
+    mixed: "hover:border-sky-500/60 hover:bg-sky-500/15",
+    unknown: "hover:border-primary/45 hover:bg-muted/25",
+  };
+  return [PRESENCE_TONE_SURFACE[tone], hoverByTone[tone]].join(" ");
+}
+
+export function presenceCardSubtitleClassName(presence: AgentPresencePublic | undefined): string {
+  const label = presence?.label ?? "Unknown";
+  const tone = presenceBadgeTone(label);
+  const subtitleTone: Record<PresenceBadgeTone, string> = {
+    idle: "text-emerald-900/80 dark:text-emerald-200/90",
+    away: "text-amber-900/80 dark:text-amber-200/90",
+    busy: "text-violet-900/80 dark:text-violet-200/90",
+    unavailable: "text-slate-800/85 dark:text-slate-200/90",
+    mixed: "text-sky-900/80 dark:text-sky-200/90",
+    unknown: "text-muted-foreground",
+  };
+  return subtitleTone[tone];
+}
 
 export function presenceBadgeClassName(label: string, stale: boolean): string {
   const tone = presenceBadgeTone(label);
-  const base = `inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-tight ${BADGE_TONE_CLASS[tone]}`;
+  const base = `inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-tight ${PRESENCE_TONE_SURFACE[tone]}`;
   if (!stale) return base;
   return `${base} ring-1 ring-dashed ring-muted-foreground/40`;
 }

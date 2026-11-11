@@ -293,7 +293,7 @@ export function SupportAnalyticsTicketExplorerModal({
     <Dialog open={request != null} onOpenChange={handleOpenChange}>
       <DialogContent
         overlayClassName="bg-black/45"
-        className="flex max-h-[min(85vh,48rem)] w-[min(96vw,56rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+        className="flex max-h-[min(88vh,52rem)] w-[min(98vw,72rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
         aria-describedby={request ? "ticket-explorer-desc" : undefined}
       >
         {request ? (
@@ -316,7 +316,7 @@ export function SupportAnalyticsTicketExplorerModal({
 
             {request.filterTabs?.length ? (
               <div
-                className="flex shrink-0 flex-wrap gap-1 border-b border-border bg-background px-4 py-2"
+                className="flex shrink-0 flex-nowrap gap-1 overflow-x-auto border-b border-border bg-background px-4 py-2"
                 role="tablist"
                 aria-label="Workload filters"
               >
@@ -329,7 +329,7 @@ export function SupportAnalyticsTicketExplorerModal({
                       type="button"
                       size="sm"
                       variant={tab.key === activeTabKey ? "default" : "outline"}
-                      className="h-8 text-xs"
+                      className="h-8 shrink-0 whitespace-nowrap text-xs"
                       role="tab"
                       aria-selected={tab.key === activeTabKey}
                       title={
@@ -360,7 +360,7 @@ export function SupportAnalyticsTicketExplorerModal({
               </p>
             ) : null}
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2">
+            <div className="flex shrink-0 flex-nowrap items-center gap-2 overflow-x-auto border-b border-border bg-background px-4 py-2">
               {request.source === "live" ? (
                 <Select
                   value={groupFilter}
@@ -369,7 +369,7 @@ export function SupportAnalyticsTicketExplorerModal({
                     setPage(0);
                   }}
                 >
-                  <SelectTrigger className="h-9 w-[11rem]" aria-label="Filter by Freshdesk group">
+                  <SelectTrigger className="h-9 w-[12.5rem] shrink-0" aria-label="Filter by Freshdesk group">
                     <SelectValue placeholder="All groups" />
                   </SelectTrigger>
                   <SelectContent>
@@ -385,7 +385,7 @@ export function SupportAnalyticsTicketExplorerModal({
                   </SelectContent>
                 </Select>
               ) : null}
-              <div className="relative min-w-[12rem] flex-1">
+              <div className="relative min-w-[10rem] flex-1">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
@@ -405,7 +405,7 @@ export function SupportAnalyticsTicketExplorerModal({
                   setPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-[9.5rem]" aria-label="Sort field">
+                <SelectTrigger className="h-9 w-[8.75rem] shrink-0" aria-label="Sort field">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent>
@@ -421,7 +421,7 @@ export function SupportAnalyticsTicketExplorerModal({
                   setPage(0);
                 }}
               >
-                <SelectTrigger className="h-9 w-[8.5rem]" aria-label="Sort direction">
+                <SelectTrigger className="h-9 w-[7.75rem] shrink-0" aria-label="Sort direction">
                   <span className="flex items-center gap-1.5">
                     {sortDirection === "asc" ? (
                       <ArrowUp className="h-3.5 w-3.5" aria-hidden />
@@ -439,7 +439,14 @@ export function SupportAnalyticsTicketExplorerModal({
               <span className="hidden text-xs text-muted-foreground sm:inline">
                 {SORT_FIELD_LABEL[sortField]} · {sortDirection === "desc" ? "Newest first" : "Oldest first"}
               </span>
-              <Button type="button" variant="outline" size="sm" disabled={!filtered.length} onClick={exportCsv}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 whitespace-nowrap"
+                disabled={!filtered.length}
+                onClick={exportCsv}
+              >
                 <Download className="mr-2 h-3.5 w-3.5" />
                 Export CSV
               </Button>
@@ -460,10 +467,10 @@ export function SupportAnalyticsTicketExplorerModal({
                       <colgroup>
                         <col className="w-[5.25rem]" />
                         <col />
-                        {!showResolvedColumn ? <col className="w-[6.25rem]" /> : null}
-                        <col className="w-[6.5rem]" />
-                        <col className="w-[6.75rem]" />
-                        <col className="w-[8.25rem]" />
+                        {!showResolvedColumn ? <col className="w-[9rem]" /> : null}
+                        <col className="w-[7rem]" />
+                        <col className="w-[7.25rem]" />
+                        <col className="w-[8.5rem]" />
                         {showResolvedColumn ? <col className="w-[8.25rem]" /> : null}
                       </colgroup>
                       <thead>
@@ -484,10 +491,10 @@ export function SupportAnalyticsTicketExplorerModal({
                       <colgroup>
                         <col className="w-[5.25rem]" />
                         <col />
-                        {!showResolvedColumn ? <col className="w-[6.25rem]" /> : null}
-                        <col className="w-[6.5rem]" />
-                        <col className="w-[6.75rem]" />
-                        <col className="w-[8.25rem]" />
+                        {!showResolvedColumn ? <col className="w-[9rem]" /> : null}
+                        <col className="w-[7rem]" />
+                        <col className="w-[7.25rem]" />
+                        <col className="w-[8.5rem]" />
                         {showResolvedColumn ? <col className="w-[8.25rem]" /> : null}
                       </colgroup>
                       <tbody>
@@ -505,7 +512,9 @@ export function SupportAnalyticsTicketExplorerModal({
                                 {t.groupName || "Unassigned"}
                               </td>
                             ) : null}
-                            <td className="px-2 py-2">{t.statusLabel}</td>
+                            <td className="whitespace-nowrap px-2 py-2 text-xs" title={t.statusLabel}>
+                              {t.statusLabel.length > 18 ? `${t.statusLabel.slice(0, 16)}…` : t.statusLabel}
+                            </td>
                             <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
                             {showResolvedColumn ? (
                               <td className="whitespace-nowrap px-2 py-2 text-xs">

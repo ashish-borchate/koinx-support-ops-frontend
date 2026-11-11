@@ -49,26 +49,10 @@ function openGroupExplorer(
   });
 }
 
-function openTotalsExplorer(
-  onExplore: (req: SupportAnalyticsTicketExplorerRequest) => void,
-  totals: LiveWorkloadCounts,
-  metric: LiveWorkloadMetricKey,
-) {
-  const base = { limit: "500" };
-  const tabs = buildWorkloadFilterTabs(totals, base);
-  const initialTabKey = workloadMetricTabKey(metric);
-  const tab = tabs.find((t) => t.key === initialTabKey) ?? tabs[0];
-
-  onExplore({
-    source: "live",
-    title: "All groups",
-    subtitle: backlogExplorerSubtitle(totals.backlog, "Live sync · total backlog"),
-    exportFileName: "live-groups-total.csv",
-    filterTabs: tabs,
-    initialTabKey: tab?.key ?? "backlog",
-    queryParams: tab?.queryParams ?? { kind: "backlog", ...base },
-    initialGroupFreshdeskId: "all",
-  });
+function groupActivityDot(counts: LiveWorkloadCounts): "green" | "red" | null {
+  if (counts.statusOpen > 0 || counts.waitingOnCustomer > 0) return "green";
+  if (counts.overdueResolution > 0 && counts.backlog > 0) return "red";
+  return null;
 }
 
 export function SupportAnalyticsLiveGroupWorkload({
@@ -94,10 +78,10 @@ export function SupportAnalyticsLiveGroupWorkload({
       {data ? (
         <>
           {data.groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No backlog tickets in the Live store.</p>
+            <p className="text-sm text-muted-foreground">No Freshdesk groups in the Live store yet.</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-border bg-card">
-              <table className="min-w-[52rem] w-full text-sm">
+              <table className="min-w-[56rem] w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
                     <th className="px-3 py-2 font-medium">Group</th>
@@ -111,27 +95,41 @@ export function SupportAnalyticsLiveGroupWorkload({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-border bg-muted/20 font-medium">
-                    <td className="px-3 py-2">All groups (total)</td>
-                    <MetricCells
-                      counts={data.totals}
-                      onMetric={(m) => openTotalsExplorer(onExplore, data.totals, m)}
-                    />
-                  </tr>
-                  {data.groups.map((g) => (
-                    <tr key={String(g.groupFreshdeskId)} className="border-b border-border/60 last:border-0">
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="text-left font-medium hover:underline"
-                          onClick={() => openGroupExplorer(onExplore, g, "backlog")}
-                        >
-                          {g.groupName}
-                        </button>
-                      </td>
-                      <MetricCells counts={g} onMetric={(m) => openGroupExplorer(onExplore, g, m)} />
-                    </tr>
-                  ))}
+                  {data.groups.map((g) => {
+                    const dot = groupActivityDot(g);
+                    return (
+                      <tr key={String(g.groupFreshdeskId)} className="border-b border-border/60 last:border-0">
+                        <td className="max-w-[14rem] px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              className="min-w-0 truncate text-left font-medium hover:underline"
+                              title={g.groupName}
+                              onClick={() => openGroupExplorer(onExplore, g, "backlog")}
+                            >
+                              {g.groupName}
+                            </button>
+                            {dot ? (
+                              <span
+                                className={`h-2 w-2 shrink-0 rounded-full ${
+                                  dot === "green" ? "bg-emerald-500" : "bg-red-500"
+                                }`}
+                                title={
+                                  dot === "green"
+                                    ? "Open or waiting tickets in this group"
+                                    : "Overdue resolution SLA in this group"
+                                }
+                                aria-hidden
+                              />
+                            ) : (
+                              <span className="w-2 shrink-0" aria-hidden />
+                            )}
+                          </div>
+                        </td>
+                        <MetricCells counts={g} onMetric={(m) => openGroupExplorer(onExplore, g, m)} />
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

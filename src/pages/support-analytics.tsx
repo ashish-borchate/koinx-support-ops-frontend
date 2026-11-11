@@ -15,7 +15,8 @@ import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-histo
 import { SupportAnalyticsLiveAgentWorkload } from "@/components/support-analytics/live-agent-workload";
 import { SupportAnalyticsLiveGroupWorkload } from "@/components/support-analytics/live-group-workload";
 import { SupportAnalyticsSchedulerStatusPanel } from "@/components/support-analytics/scheduler-status-panel";
-import { LiveReportingToolbar } from "@/components/support-analytics/live-reporting-toolbar";
+import { ReportingPeriodSection } from "@/components/support-analytics/reporting-period-section";
+import type { DatePresetId } from "@/lib/support-analytics-date-presets";
 import {
   LiveBacklogMetricCard,
   LiveDurationCard,
@@ -146,6 +147,7 @@ export function SupportAnalyticsPage() {
   const rangeInit = useRef(false);
   const [mainTab, setMainTab] = useState<"live" | "historical">("live");
   const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
+  const [periodPreset, setPeriodPreset] = useState<DatePresetId>("custom");
 
   const queryKey = useMemo(
     () => ["support-analytics", "overview", appliedFrom, appliedTo],
@@ -204,17 +206,19 @@ export function SupportAnalyticsPage() {
     },
   });
 
-  function applyDateRange() {
-    if (!draftFrom || !draftTo) {
-      toast.error("Select both From and To dates (IST).");
+  function applyReportingRange(from: string, to: string) {
+    if (!from || !to) {
+      toast.error("Select both From and To dates.");
       return;
     }
-    if (draftFrom > draftTo) {
+    if (from > to) {
       toast.error("From date cannot be later than To date.");
       return;
     }
-    setAppliedFrom(draftFrom);
-    setAppliedTo(draftTo);
+    setDraftFrom(from);
+    setDraftTo(to);
+    setAppliedFrom(from);
+    setAppliedTo(to);
     setExplorerRequest(null);
   }
 
@@ -446,20 +450,18 @@ export function SupportAnalyticsPage() {
 
               <section className="space-y-3 rounded-xl border border-border bg-card/40 p-3 sm:p-4">
                 <SectionHeader title="Selected Period Data — Not Live" />
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/80 pb-3 text-sm">
-                  <LiveReportingToolbar
-                    draftFrom={draftFrom}
-                    draftTo={draftTo}
-                    onDraftFrom={setDraftFrom}
-                    onDraftTo={setDraftTo}
-                    onApply={applyDateRange}
-                  />
-                  {appliedFrom && appliedTo ? (
-                    <span className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium tabular-nums text-foreground">
-                      {formatCalendarDate(appliedFrom)} – {formatCalendarDate(appliedTo)}
-                    </span>
-                  ) : null}
-                </div>
+                <ReportingPeriodSection
+                  draftFrom={draftFrom}
+                  draftTo={draftTo}
+                  appliedFrom={appliedFrom}
+                  appliedTo={appliedTo}
+                  preset={periodPreset}
+                  onPresetChange={setPeriodPreset}
+                  onDraftFrom={setDraftFrom}
+                  onDraftTo={setDraftTo}
+                  onApply={applyReportingRange}
+                  showIstInSummary={false}
+                />
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <LivePeriodCountCard
                     label="Tickets created"

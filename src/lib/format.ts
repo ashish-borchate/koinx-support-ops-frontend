@@ -141,6 +141,14 @@ export function formatCalendarDate(key?: string | null) {
   });
 }
 
+/** Display a stored `YYYY-MM-DD` key as `DD/MM/YYYY`. */
+export function formatIsoDateSlash(key?: string | null) {
+  if (!key) return "—";
+  const [y, m, d] = key.split("-");
+  if (!y || !m || !d) return "—";
+  return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+}
+
 /** Mintlify / publication timestamps (ISO), not calendar `YYYY-MM-DD` keys. */
 export function formatPublicationTimestamp(iso?: string | null) {
   if (!iso) return "Not recorded";

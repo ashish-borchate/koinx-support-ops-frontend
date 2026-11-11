@@ -47,7 +47,7 @@ export function buildWorkloadFilterTabs(
     },
     {
       key: "waiting",
-      label: "Waiting on customer",
+      label: "Waiting on Cust.",
       count: counts.waitingOnCustomer,
       queryParams: { kind: "waiting", ...baseQuery },
     },

@@ -47,8 +47,6 @@ type TicketSortField = "created" | "due" | "updated";
 type SortDirection = "asc" | "desc";
 
 const PAGE_SIZE = 25;
-const STICKY_HEAD =
-  "sticky top-0 z-20 bg-background px-2 py-2 shadow-[0_1px_0_0_hsl(var(--border))]";
 
 function ticketLabel(t: SupportAnalyticsTicketRow) {
   return t.displayId != null ? String(t.displayId) : String(t.freshdeskId);
@@ -360,22 +358,24 @@ export function SupportAnalyticsTicketExplorerModal({
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-background px-4 py-2">
+            <div className="isolate min-h-0 flex-1 overflow-y-auto bg-background px-4 py-2">
               {ticketsQuery.isLoading ? <LoadingBlock label="Loading tickets…" /> : null}
               {ticketsQuery.isError ? <ErrorBlock message="Could not load tickets." /> : null}
               {!ticketsQuery.isLoading && !ticketsQuery.isError && filtered.length === 0 ? (
                 <Empty title="No tickets" body="Nothing matches this filter." />
               ) : null}
               {pageRows.length > 0 ? (
-                <table className="w-full border-separate border-spacing-0 text-sm">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-muted-foreground">
-                      <th className={STICKY_HEAD}>Ticket No</th>
-                      <th className={STICKY_HEAD}>Subject</th>
-                      <th className={STICKY_HEAD}>Assignee</th>
-                      <th className={STICKY_HEAD}>Status</th>
-                      <th className={STICKY_HEAD}>Created</th>
-                      {showResolvedColumn ? <th className={STICKY_HEAD}>Resolved</th> : null}
+                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Ticket No</th>
+                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Subject</th>
+                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Assignee</th>
+                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Status</th>
+                      <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Created</th>
+                      {showResolvedColumn ? (
+                        <th className="sticky top-0 z-10 border-b border-border bg-background px-2 py-2">Resolved</th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>

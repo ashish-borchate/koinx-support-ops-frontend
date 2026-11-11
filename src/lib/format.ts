@@ -156,7 +156,9 @@ export function formatPublicationTimestamp(iso?: string | null) {
 
 export function formatWhen(iso?: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-IN", {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
     day: "numeric",
     month: "short",

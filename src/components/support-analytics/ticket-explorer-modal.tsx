@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, ExternalLink, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, ExternalLink, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Empty, ErrorBlock, LoadingBlock } from "@/components/bits";
 import { api } from "@/lib/api";
 import { formatCalendarDate, formatNumber, formatWhen } from "@/lib/format";
@@ -19,6 +20,7 @@ export type SupportAnalyticsTicketRow = {
   groupName?: string | null;
   createdAt: string;
   updatedAt?: string;
+  dueBy?: string | null;
   firstRespondedAt?: string | null;
   resolvedAt?: string | null;
 };
@@ -41,10 +43,49 @@ export type SupportAnalyticsTicketExplorerRequest = {
   initialTabKey?: string;
 };
 
+type LiveBacklogSortField = "created" | "due" | "updated";
+type SortDirection = "asc" | "desc";
+
 const PAGE_SIZE = 25;
 
 function ticketLabel(t: SupportAnalyticsTicketRow) {
   return t.displayId != null ? String(t.displayId) : String(t.freshdeskId);
+}
+
+function isLiveTotalBacklogView(
+  source: SupportAnalyticsTicketExplorerRequest["source"] | undefined,
+  queryParams: Record<string, string> | null,
+  filterTabs?: TicketExplorerFilterTab[],
+) {
+  return source === "live" && queryParams?.kind === "backlog" && !filterTabs?.length;
+}
+
+function sortTimestamp(iso?: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function compareLiveBacklogRows(
+  a: SupportAnalyticsTicketRow,
+  b: SupportAnalyticsTicketRow,
+  field: LiveBacklogSortField,
+  direction: SortDirection,
+): number {
+  const pick = (row: SupportAnalyticsTicketRow) => {
+    if (field === "created") return sortTimestamp(row.createdAt);
+    if (field === "due") return sortTimestamp(row.dueBy);
+    return sortTimestamp(row.updatedAt);
+  };
+  const av = pick(a);
+  const bv = pick(b);
+  const dirMul = direction === "asc" ? 1 : -1;
+
+  if (av === null && bv === null) return a.freshdeskId - b.freshdeskId;
+  if (av === null) return 1;
+  if (bv === null) return -1;
+  if (av !== bv) return (av - bv) * dirMul;
+  return a.freshdeskId - b.freshdeskId;
 }
 
 function matchesSearch(t: SupportAnalyticsTicketRow, needle: string) {
@@ -62,7 +103,26 @@ function matchesSearch(t: SupportAnalyticsTicketRow, needle: string) {
   return hay.includes(q);
 }
 
-function toCsv(rows: SupportAnalyticsTicketRow[]) {
+function toCsv(rows: SupportAnalyticsTicketRow[], liveTotalBacklog: boolean) {
+  if (liveTotalBacklog) {
+    const header = ["Ticket No", "Subject", "Assignee", "Status", "Created (IST)", "Due by (IST)", "Last modified (IST)", "Freshdesk URL"];
+    const lines = rows.map((t) =>
+      [
+        ticketLabel(t),
+        (t.subject ?? "").replace(/"/g, '""'),
+        (t.assignedAgentName ?? "").replace(/"/g, '""'),
+        t.statusLabel,
+        t.createdAt ? formatWhen(t.createdAt) : "",
+        t.dueBy ? formatWhen(t.dueBy) : "",
+        t.updatedAt ? formatWhen(t.updatedAt) : "",
+        t.url ?? "",
+      ]
+        .map((c) => `"${c}"`)
+        .join(","),
+    );
+    return [header.join(","), ...lines].join("\n");
+  }
+
   const header = [
     "Ticket",
     "Subject",
@@ -92,6 +152,12 @@ function toCsv(rows: SupportAnalyticsTicketRow[]) {
   return [header.join(","), ...lines].join("\n");
 }
 
+const SORT_FIELD_LABEL: Record<LiveBacklogSortField, string> = {
+  created: "Date created",
+  due: "Due by time",
+  updated: "Last modified",
+};
+
 export function SupportAnalyticsTicketExplorerModal({
   request,
   onClose,
@@ -102,6 +168,8 @@ export function SupportAnalyticsTicketExplorerModal({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<LiveBacklogSortField>("created");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   useEffect(() => {
     if (!request) {
@@ -119,6 +187,8 @@ export function SupportAnalyticsTicketExplorerModal({
     }
     setSearch("");
     setPage(0);
+    setSortField("created");
+    setSortDirection("desc");
   }, [request]);
 
   const activeQueryParams = useMemo(() => {
@@ -131,6 +201,7 @@ export function SupportAnalyticsTicketExplorerModal({
   }, [request, activeTabKey]);
 
   const activeTab = request?.filterTabs?.find((t) => t.key === activeTabKey) ?? null;
+  const liveTotalBacklog = isLiveTotalBacklogView(request?.source, activeQueryParams, request?.filterTabs);
 
   const endpoint =
     request?.source === "historical"
@@ -151,8 +222,10 @@ export function SupportAnalyticsTicketExplorerModal({
 
   const filtered = useMemo(() => {
     const rows = ticketsQuery.data?.tickets ?? [];
-    return rows.filter((t) => matchesSearch(t, search));
-  }, [ticketsQuery.data?.tickets, search]);
+    const searched = rows.filter((t) => matchesSearch(t, search));
+    if (!liveTotalBacklog) return searched;
+    return [...searched].sort((a, b) => compareLiveBacklogRows(a, b, sortField, sortDirection));
+  }, [ticketsQuery.data?.tickets, search, liveTotalBacklog, sortField, sortDirection]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -167,7 +240,7 @@ export function SupportAnalyticsTicketExplorerModal({
   }
 
   function exportCsv() {
-    const blob = new Blob([toCsv(filtered)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([toCsv(filtered, liveTotalBacklog)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -249,6 +322,51 @@ export function SupportAnalyticsTicketExplorerModal({
                   aria-label="Search tickets"
                 />
               </div>
+              {liveTotalBacklog ? (
+                <>
+                  <Select
+                    value={sortField}
+                    onValueChange={(value) => {
+                      setSortField(value as LiveBacklogSortField);
+                      setPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-[9.5rem]" aria-label="Sort field">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="created">Date created</SelectItem>
+                      <SelectItem value="due">Due by time</SelectItem>
+                      <SelectItem value="updated">Last modified</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={sortDirection}
+                    onValueChange={(value) => {
+                      setSortDirection(value as SortDirection);
+                      setPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 w-[8.5rem]" aria-label="Sort direction">
+                      <span className="flex items-center gap-1.5">
+                        {sortDirection === "asc" ? (
+                          <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+                        ) : (
+                          <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+                        )}
+                        <SelectValue placeholder="Order" />
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="desc">Descending</SelectItem>
+                      <SelectItem value="asc">Ascending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="hidden text-xs text-muted-foreground sm:inline">
+                    {SORT_FIELD_LABEL[sortField]} · {sortDirection === "desc" ? "Newest first" : "Oldest first"}
+                  </span>
+                </>
+              ) : null}
               <Button type="button" variant="outline" size="sm" disabled={!filtered.length} onClick={exportCsv}>
                 <Download className="mr-2 h-3.5 w-3.5" />
                 Export CSV
@@ -264,59 +382,81 @@ export function SupportAnalyticsTicketExplorerModal({
               {pageRows.length > 0 ? (
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-popover">
-                    <tr className="border-b text-left text-xs text-muted-foreground">
-                      <th className="px-2 py-2">#</th>
-                      <th className="px-2 py-2">Subject</th>
-                      <th className="px-2 py-2">Assignee</th>
-                      <th className="px-2 py-2">Status</th>
-                      <th className="px-2 py-2">Created</th>
-                      <th className="px-2 py-2">Resolved</th>
-                      <th className="px-2 py-2 text-right">Freshdesk</th>
-                    </tr>
+                    {liveTotalBacklog ? (
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="px-2 py-2">Ticket No</th>
+                        <th className="px-2 py-2">Subject</th>
+                        <th className="px-2 py-2">Assignee</th>
+                        <th className="px-2 py-2">Status</th>
+                        <th className="px-2 py-2">Created</th>
+                      </tr>
+                    ) : (
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="px-2 py-2">#</th>
+                        <th className="px-2 py-2">Subject</th>
+                        <th className="px-2 py-2">Assignee</th>
+                        <th className="px-2 py-2">Status</th>
+                        <th className="px-2 py-2">Created</th>
+                        <th className="px-2 py-2">Resolved</th>
+                        <th className="px-2 py-2" />
+                      </tr>
+                    )}
                   </thead>
                   <tbody>
-                    {pageRows.map((t) => (
-                      <tr key={t.freshdeskId} className="border-b border-border/60">
-                        <td className="px-2 py-2 font-medium tabular-nums">
-                          {t.url ? (
-                            <a
-                              href={t.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              #{ticketLabel(t)}
-                            </a>
-                          ) : (
-                            `#${ticketLabel(t)}`
-                          )}
-                        </td>
-                        <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
-                          {t.subject || "—"}
-                        </td>
-                        <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
-                        <td className="px-2 py-2">{t.statusLabel}</td>
-                        <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
-                        <td className="whitespace-nowrap px-2 py-2 text-xs">
-                          {t.resolvedAt ? formatWhen(t.resolvedAt) : "—"}
-                        </td>
-                        <td className="px-2 py-2 text-right">
-                          {t.url ? (
-                            <a
-                              href={t.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center text-primary hover:underline"
-                            >
-                              Freshdesk
-                              <ExternalLink className="ml-1 h-3 w-3" />
-                            </a>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {pageRows.map((t) =>
+                      liveTotalBacklog ? (
+                        <tr key={t.freshdeskId} className="border-b border-border/60">
+                          <td className="px-2 py-2 font-medium tabular-nums">
+                            {t.url ? (
+                              <a
+                                href={t.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                {ticketLabel(t)}
+                              </a>
+                            ) : (
+                              ticketLabel(t)
+                            )}
+                          </td>
+                          <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
+                            {t.subject || "—"}
+                          </td>
+                          <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
+                          <td className="px-2 py-2">{t.statusLabel}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
+                        </tr>
+                      ) : (
+                        <tr key={t.freshdeskId} className="border-b border-border/60">
+                          <td className="px-2 py-2 font-medium tabular-nums">#{ticketLabel(t)}</td>
+                          <td className="max-w-[14rem] truncate px-2 py-2" title={t.subject ?? undefined}>
+                            {t.subject || "—"}
+                          </td>
+                          <td className="px-2 py-2">{t.assignedAgentName || "—"}</td>
+                          <td className="px-2 py-2">{t.statusLabel}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-xs">{formatWhen(t.createdAt)}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-xs">
+                            {t.resolvedAt ? formatWhen(t.resolvedAt) : "—"}
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            {t.url ? (
+                              <a
+                                href={t.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center text-primary hover:underline"
+                              >
+                                Freshdesk
+                                <ExternalLink className="ml-1 h-3 w-3" />
+                              </a>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ),
+                    )}
                   </tbody>
                 </table>
               ) : null}

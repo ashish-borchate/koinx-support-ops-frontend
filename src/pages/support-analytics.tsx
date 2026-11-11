@@ -132,7 +132,7 @@ const SNAPSHOT_FALLBACKS: Record<string, LiveMetricDefinition> = {
 };
 
 export function SupportAnalyticsPage() {
-  const { can, readOnly } = useAuth();
+  const { can, canMutate, readOnly } = useAuth();
   const qc = useQueryClient();
   const [explorerRequest, setExplorerRequest] = useState<SupportAnalyticsTicketExplorerRequest | null>(null);
   const [mainTab, setMainTab] = useState<"live" | "historical">("live");
@@ -182,7 +182,8 @@ export function SupportAnalyticsPage() {
     });
   }
 
-  const canSync = can("support_analytics.sync") && !readOnly;
+  const canSync = canMutate("support_analytics.sync");
+  const syncPreviewInViewAs = readOnly && can("support_analytics.sync") && mainTab === "live";
   const freshness = data?.freshness;
   const definitions = data?.definitions ?? [];
   const overviewErrorMessage =
@@ -203,9 +204,9 @@ export function SupportAnalyticsPage() {
         title="Support Analytics"
         description="Freshdesk ticket operations — separate from official KPI Performance scoring."
         action={
-          (canSync && mainTab === "live") || showSyncHistory ? (
+          canSync || syncPreviewInViewAs || showSyncHistory ? (
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {canSync && mainTab === "live" ? (
+              {canSync ? (
                 <Button
                   variant="default"
                   size="sm"
@@ -214,6 +215,18 @@ export function SupportAnalyticsPage() {
                   onClick={() => syncRun.mutate()}
                 >
                   {syncRun.isPending ? "Syncing…" : "Sync Freshdesk"}
+                </Button>
+              ) : null}
+              {syncPreviewInViewAs ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-9 min-w-[8.5rem] px-4"
+                  disabled
+                  title="View As is read-only. Exit View As (or sign in as this user) to run Freshdesk sync."
+                >
+                  Sync Freshdesk
                 </Button>
               ) : null}
               {showSyncHistory ? (

@@ -23,6 +23,7 @@ import { MetricCard } from "@/components/design/metric-card";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { moduleIndexSegment } from "@/lib/module-nav";
+import { canAccessDailyDsat, canCorrectDailyDsat } from "@/lib/dsat-daily-access";
 
 const ROOT_CAUSES = [
   "Agent Issue",
@@ -158,7 +159,7 @@ export function NegativeReviewsRoutes() {
       <Route element={<NrLayout />}>
         <Route path="dashboard" element={<NrDashboardPage />} />
         <Route path="tracker" element={<NrTrackerPage />} />
-        <Route path="daily-dsat" element={<NrDailyDsatPage />} />
+        <Route path="daily-dsat" element={<NrDailyDsatRedirect />} />
         <Route index element={<NegativeReviewsIndex />} />
       </Route>
     </Routes>
@@ -172,13 +173,27 @@ type DsatDailyCheckRow = {
   completedAt: string;
   outcome: "dsat_found" | "no_dsat_found";
   note: string;
+  lastEditedBy?: string | null;
+  lastEditedAt?: string | null;
 };
 
+export function NrDailyDsatRedirect() {
+  const { effective, can } = useAuth();
+  const [searchParams] = useSearchParams();
+  if (!canAccessDailyDsat(effective?.roleKey)) {
+    if (can("negative_reviews.tracker")) return <Navigate to="/negative-reviews/tracker" replace />;
+    return <Navigate to="/" replace />;
+  }
+  const date = searchParams.get("date");
+  const qs = date ? `?date=${encodeURIComponent(date)}` : "";
+  return <Navigate to={`/daily-dsat${qs}`} replace />;
+}
+
 export function NrDailyDsatPage() {
-  const { effective } = useAuth();
-  const allowed =
-    effective?.roleKey === "senior_agent" || effective?.roleKey === "admin";
-  if (!allowed) return <Navigate to="/" replace />;
+  const { effective, readOnly } = useAuth();
+  if (!canAccessDailyDsat(effective?.roleKey)) return <Navigate to="/" replace />;
+  const canCorrect = !readOnly && canCorrectDailyDsat(effective?.roleKey);
+  const canSubmit = !readOnly;
 
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -218,6 +233,26 @@ export function NrDailyDsatPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const correct = useMutation({
+    mutationFn: () =>
+      api<{ check: DsatDailyCheckRow }>(`/api/dsat/daily-checks/${encodeURIComponent(dateIst)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          outcome,
+          note: note.trim() || undefined,
+        }),
+      }),
+    onSuccess: () => {
+      toast.success("Daily DSAT check updated");
+      void queryClient.invalidateQueries({ queryKey: ["dsat-daily-checks"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      navigate("/");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const [editing, setEditing] = useState(false);
+
   if (!validDate) {
     return <ErrorBlock message="Open this page from your Daily DSAT Check task or add a valid ?date=YYYY-MM-DD." />;
   }
@@ -231,7 +266,7 @@ export function NrDailyDsatPage() {
     timeZone: "UTC",
   });
 
-  if (existing) {
+  if (existing && !editing) {
     return (
       <Card>
         <CardHeader>
@@ -239,7 +274,7 @@ export function NrDailyDsatPage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            This review was completed on{" "}
+            Submitted on{" "}
             {new Date(existing.completedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.
           </p>
           <p>
@@ -249,9 +284,81 @@ export function NrDailyDsatPage() {
             </span>
           </p>
           {existing.note ? <p>Note: {existing.note}</p> : null}
-          <Button type="button" variant="outline" onClick={() => navigate("/negative-reviews/tracker")}>
-            Open Negative Reviews tracker
-          </Button>
+          {existing.lastEditedAt ? (
+            <p className="text-xs">
+              Last corrected {new Date(existing.lastEditedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2 pt-2">
+            {canCorrect ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setOutcome(existing.outcome);
+                  setNote(existing.note);
+                  setEditing(true);
+                }}
+              >
+                Correct submission
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={() => navigate("/negative-reviews/tracker")}>
+              Open Negative Reviews tracker
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (existing && editing && canCorrect) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Correct Daily DSAT — {formatted}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Original submission is preserved. Corrections are audited with your identity.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label>Outcome</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant={outcome === "dsat_found" ? "default" : "outline"}
+                className="justify-start"
+                onClick={() => setOutcome("dsat_found")}
+              >
+                DSAT found
+              </Button>
+              <Button
+                type="button"
+                variant={outcome === "no_dsat_found" ? "default" : "outline"}
+                className="justify-start"
+                onClick={() => setOutcome("no_dsat_found")}
+              >
+                Checked Freshdesk — No DSAT Found
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="dsat-note-edit">Notes (optional)</Label>
+            <Textarea id="dsat-note-edit" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              disabled={!outcome || correct.isPending}
+              onClick={() => correct.mutate()}
+            >
+              Save correction
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -301,13 +408,17 @@ export function NrDailyDsatPage() {
           <Textarea id="dsat-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            disabled={!outcome || submit.isPending}
-            onClick={() => submit.mutate()}
-          >
-            Confirm completion
-          </Button>
+          {canSubmit ? (
+            <Button
+              type="button"
+              disabled={!outcome || submit.isPending}
+              onClick={() => submit.mutate()}
+            >
+              Confirm completion
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">View As is read-only — exit View As to submit.</p>
+          )}
           <Button type="button" variant="ghost" onClick={() => navigate("/")}>
             Back to dashboard
           </Button>

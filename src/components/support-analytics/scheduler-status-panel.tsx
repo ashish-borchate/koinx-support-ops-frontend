@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { incrementalPhaseRunHistoryLabel } from "@/lib/support-analytics-incremental-phase";
 import { buildSchedulerAttention } from "@/lib/support-analytics-scheduler-diagnostics";
 import { cn } from "@/lib/utils";
 
@@ -49,10 +50,12 @@ export function SupportAnalyticsSchedulerStatusPanel({
   display,
   inOperationalWindow,
   ticketsStored,
+  lastSyncTicketIncrementalPhase,
 }: {
   display?: FreshnessDisplay | null;
   inOperationalWindow?: boolean;
   ticketsStored?: number;
+  lastSyncTicketIncrementalPhase?: string | null;
 }) {
   if (!display) return null;
 
@@ -72,6 +75,7 @@ export function SupportAnalyticsSchedulerStatusPanel({
     display.latestScheduledLabelIst != null
       ? `${display.latestScheduledLabelIst} · ${scheduledAttemptLabel(display.latestScheduledStatus)}`
       : "Not recorded";
+  const lastRunPhaseLabel = incrementalPhaseRunHistoryLabel(lastSyncTicketIncrementalPhase);
 
   return (
     <div className="px-1 py-1">
@@ -85,6 +89,9 @@ export function SupportAnalyticsSchedulerStatusPanel({
         <SyncDetailRow label="Last automatic attempt">
           {lastAuto}
         </SyncDetailRow>
+        {lastRunPhaseLabel ? (
+          <SyncDetailRow label="Last sync ticket pass">{lastRunPhaseLabel}</SyncDetailRow>
+        ) : null}
         <SyncDetailRow label="Next expected slot">
           {display.nextScheduledLabelIst ? `${display.nextScheduledLabelIst} IST` : "—"}
         </SyncDetailRow>

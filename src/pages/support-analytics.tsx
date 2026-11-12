@@ -12,6 +12,7 @@ import {
   isSupportAnalyticsLivePollQuery,
   useSupportAnalyticsLivePolling,
 } from "@/lib/support-analytics-live-polling";
+import { incrementalPhaseProgressLabel } from "@/lib/support-analytics-incremental-phase";
 import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
@@ -54,6 +55,8 @@ type OverviewPayload = {
       nextScheduledLabelIst?: string;
       inQuietHours?: boolean;
     };
+    ticketIncrementalPhase?: string;
+    lastSyncTicketIncrementalPhase?: string;
     display?: {
       status?: string;
       lastSuccessfulSyncLabelIst?: string | null;
@@ -212,6 +215,9 @@ export function SupportAnalyticsPage() {
       : "Freshdesk sync failed.";
 
   const showSyncHistory = mainTab === "live" && Boolean(freshness?.display);
+  const incrementalPhaseLabel = incrementalPhaseProgressLabel(
+    (freshness?.ticketIncrementalPhase ?? "") as "" | "initial" | "catchup",
+  );
 
   return (
     <div className="space-y-5 pb-10">
@@ -268,6 +274,7 @@ export function SupportAnalyticsPage() {
                       display={freshness!.display}
                       inOperationalWindow={freshness!.schedule?.inQuietHours === false}
                       ticketsStored={freshness!.ticketsStored}
+                      lastSyncTicketIncrementalPhase={freshness!.lastSyncTicketIncrementalPhase}
                     />
                   </PopoverContent>
                 </Popover>
@@ -308,6 +315,11 @@ export function SupportAnalyticsPage() {
           {liveBackgroundFetching > 0 && overview.data ? (
             <p className="text-xs text-muted-foreground" aria-live="polite">
               Refreshing live data…
+            </p>
+          ) : null}
+          {incrementalPhaseLabel ? (
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              {incrementalPhaseLabel}
             </p>
           ) : null}
           {syncRun.isPending ? <LoadingBlock label="Syncing Freshdesk tickets into the analytics store…" /> : null}

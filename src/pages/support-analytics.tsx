@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useIsFetching, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBlock, LoadingBlock, PageHeader, SectionHeader } from "@/components/bits";
@@ -8,6 +8,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { STALE } from "@/lib/query-client";
+import {
+  isSupportAnalyticsLivePollQuery,
+  useSupportAnalyticsLivePolling,
+} from "@/lib/support-analytics-live-polling";
 import { useAuth } from "@/lib/auth";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SupportAnalyticsHistoricalPanel } from "@/pages/support-analytics-historical-panel";
@@ -138,6 +142,19 @@ export function SupportAnalyticsPage() {
   const [mainTab, setMainTab] = useState<"live" | "historical">("live");
   const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
 
+  const livePollingActive = mainTab === "live";
+  const { refreshLiveQueries } = useSupportAnalyticsLivePolling(livePollingActive);
+  const prevMainTab = useRef(mainTab);
+  useEffect(() => {
+    if (mainTab === "live" && prevMainTab.current !== "live") {
+      void refreshLiveQueries();
+    }
+    prevMainTab.current = mainTab;
+  }, [mainTab, refreshLiveQueries]);
+  const liveBackgroundFetching = useIsFetching({
+    predicate: (query) => livePollingActive && isSupportAnalyticsLivePollQuery(query),
+  });
+
   const overview = useQuery({
     queryKey: ["support-analytics", "overview"],
     queryFn: () => api<OverviewPayload>("/api/support-analytics/overview"),
@@ -150,7 +167,6 @@ export function SupportAnalyticsPage() {
     queryKey: ["support-analytics", "sync-status"],
     queryFn: () => api<Record<string, unknown>>("/api/support-analytics/sync/status"),
     staleTime: 15_000,
-    refetchInterval: mainTab === "live" ? 20_000 : false,
   });
 
   const syncRun = useMutation({
@@ -289,6 +305,11 @@ export function SupportAnalyticsPage() {
           <SupportAnalyticsHistoricalPanel />
         </TabsContent>
         <TabsContent value="live" className="mt-0 space-y-4">
+          {liveBackgroundFetching > 0 && overview.data ? (
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              Refreshing live data…
+            </p>
+          ) : null}
           {syncRun.isPending ? <LoadingBlock label="Syncing Freshdesk tickets into the analytics store…" /> : null}
 
           {syncRun.isError ? (

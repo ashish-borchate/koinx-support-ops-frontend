@@ -11,6 +11,7 @@ import { IntegrationStepsRoutes } from "@/pages/integration-steps";
 import { ProductFeedbackRoutes } from "@/pages/product-feedback";
 import { SupportedFilesRoutes } from "@/pages/supported-files";
 import { NegativeReviewsRoutes, NrDailyDsatPage } from "@/pages/negative-reviews";
+import { canAccessDailyDsat } from "@/lib/dsat-daily-access";
 import { TokenMigrationRoutes } from "@/pages/token-migration";
 import { KnowledgeBaseRoutes } from "@/pages/knowledge-base";
 import { PasswordPage, ProfilePage, ViewAsPage } from "@/pages/account";
@@ -65,6 +66,12 @@ function Writes({ children }: { children: ReactNode }) {
   return children;
 }
 
+function DailyDsatRoute() {
+  const { effective } = useAuth();
+  if (!canAccessDailyDsat(effective?.roleKey)) return <Navigate to="/" replace />;
+  return <NrDailyDsatPage />;
+}
+
 function QaNewRoute() {
   const { can } = useAuth();
   const [params] = useSearchParams();
@@ -110,7 +117,7 @@ export default function App() {
             </Permit>
           }
         />
-        <Route path="/daily-dsat" element={<NrDailyDsatPage />} />
+        <Route path="/daily-dsat" element={<DailyDsatRoute />} />
         <Route path="/qa" element={<Permit any={["qa.view_team", "qa.view_own", "qa.create"]}><QaListPage /></Permit>} />
         <Route path="/qa/random-audits" element={<Permit any={["qa.random_audit.view_team"]}><QaRandomAuditsPage /></Permit>} />
         <Route path="/qa/appeals" element={<Permit any={["qa.view_team", "qa.view_own"]}><QaAppealsPage /></Permit>} />

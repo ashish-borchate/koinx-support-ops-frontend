@@ -225,7 +225,7 @@ export const WORKFLOW_DEFS: WorkflowDef[] = [
     slug: "daily-dsat-and-negative-reviews",
     title: "DSAT Reviews",
     description: "Senior Agent daily DSAT checks and negative review coaching linkage.",
-    roles: ["senior_agent", "supervisor", "admin", "agent"],
+    roles: ["senior_agent", "supervisor", "admin"],
     priority: 6,
     hubRoute: "/daily-dsat",
     primaryOwner: "Senior Agent",

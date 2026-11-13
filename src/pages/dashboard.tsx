@@ -41,12 +41,12 @@ type Dash = {
   };
   ownKpi: {
     label: string;
-    ticketsHandled: Metric;
-    csatPercent: Metric;
-    slaPercent: Metric;
-    firstResponseHours: Metric;
-    averageResponseHours: Metric;
-    resolutionHours: Metric;
+    ticketsHandled: Metric | null;
+    csatPercent: Metric | null;
+    slaPercent: Metric | null;
+    firstResponseHours: Metric | null;
+    averageResponseHours: Metric | null;
+    resolutionHours: Metric | null;
     qaScore: number | null;
   } | null;
   latestSupportUpdates?: SupportUpdateItem[];
@@ -65,7 +65,11 @@ export function DashboardPage() {
   if (query.isPending && !query.data) return <LoadingBlock />;
   if (query.isError) return <ErrorBlock message={query.error.message} />;
   const data = query.data;
-  if (!data) return null;
+  if (!data) {
+    return (
+      <ErrorBlock message="Dashboard data is unavailable. Refresh the page or try again in a moment." />
+    );
+  }
 
   return (
     <div className="space-y-6">

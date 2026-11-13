@@ -12,54 +12,61 @@ type Goals = {
   qaPercent: number;
 };
 
-type OwnKpi = {
+export type AgentWeekKpiStripPayload = {
   label: string;
-  ticketsHandled: Metric;
-  firstResponseHours: Metric;
-  averageResponseHours: Metric;
-  resolutionHours: Metric;
-  csatPercent: Metric;
-  slaPercent: Metric;
+  ticketsHandled: Metric | null;
+  firstResponseHours: Metric | null;
+  averageResponseHours: Metric | null;
+  resolutionHours: Metric | null;
+  csatPercent: Metric | null;
+  slaPercent: Metric | null;
   qaScore: number | null;
 };
 
-function metricText(metric: Metric | undefined, suffix = "", digits = 1) {
+function metricText(metric: Metric | null | undefined, suffix = "", digits = 1) {
   if (!metric || metric.value == null) return "—";
   return `${formatNumber(metric.value, digits)}${suffix}`;
 }
 
-export function AgentWeekKpiStrip({ ownKpi, goals }: { ownKpi: OwnKpi; goals: Goals }) {
+/** Nullable API metric object → numeric value for tone/duration helpers. */
+export function metricNumericValue(metric: Metric | null | undefined): number | null {
+  if (!metric || metric.value == null) return null;
+  return metric.value;
+}
+
+/** Pure item builder for rendering and regression tests. */
+export function buildAgentWeekKpiStripItems(ownKpi: AgentWeekKpiStripPayload, goals: Goals) {
   const items: { key: string; label: string; value: string; tone: KpiMetricTone }[] = [
     { key: "tickets", label: "Tickets", value: metricText(ownKpi.ticketsHandled, "", 0), tone: "neutral" },
     {
       key: "frt",
       label: "FRT",
-      value: formatDurationHours(ownKpi.firstResponseHours.value),
-      tone: compareKpiTone(ownKpi.firstResponseHours.value, goals.firstResponseHours, "lte"),
+      value: formatDurationHours(metricNumericValue(ownKpi.firstResponseHours)),
+      tone: compareKpiTone(metricNumericValue(ownKpi.firstResponseHours), goals.firstResponseHours, "lte"),
     },
     {
       key: "art",
       label: "ART",
-      value: formatDurationHours(ownKpi.averageResponseHours.value),
-      tone: compareKpiTone(ownKpi.averageResponseHours.value, goals.averageResponseHours, "lte"),
+      value: formatDurationHours(metricNumericValue(ownKpi.averageResponseHours)),
+      tone: compareKpiTone(metricNumericValue(ownKpi.averageResponseHours), goals.averageResponseHours, "lte"),
     },
     {
       key: "res",
       label: "Res",
-      value: formatDurationHours(ownKpi.resolutionHours.value),
-      tone: compareKpiTone(ownKpi.resolutionHours.value, goals.resolutionHours, "lte"),
+      value: formatDurationHours(metricNumericValue(ownKpi.resolutionHours)),
+      tone: compareKpiTone(metricNumericValue(ownKpi.resolutionHours), goals.resolutionHours, "lte"),
     },
     {
       key: "sla",
       label: "SLA",
       value: metricText(ownKpi.slaPercent, "%"),
-      tone: compareKpiTone(ownKpi.slaPercent.value, goals.slaPercent, "gte"),
+      tone: compareKpiTone(metricNumericValue(ownKpi.slaPercent), goals.slaPercent, "gte"),
     },
     {
       key: "csat",
       label: "CSAT",
       value: metricText(ownKpi.csatPercent, "%"),
-      tone: compareKpiTone(ownKpi.csatPercent.value, goals.csatPercent, "gte"),
+      tone: compareKpiTone(metricNumericValue(ownKpi.csatPercent), goals.csatPercent, "gte"),
     },
     {
       key: "qa",
@@ -68,6 +75,11 @@ export function AgentWeekKpiStrip({ ownKpi, goals }: { ownKpi: OwnKpi; goals: Go
       tone: compareKpiTone(ownKpi.qaScore, goals.qaPercent, "gte"),
     },
   ];
+  return items;
+}
+
+export function AgentWeekKpiStrip({ ownKpi, goals }: { ownKpi: AgentWeekKpiStripPayload; goals: Goals }) {
+  const items = buildAgentWeekKpiStripItems(ownKpi, goals);
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
